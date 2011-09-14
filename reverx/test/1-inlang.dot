@@ -1,0 +1,19 @@
+digraph G {
+rankdir=LR;
+null [shape=plaintext label=""];
+null -> S0
+S0 -> S4 [label="[A-Za-z]+"];
+S1 -> S2 [label="\\x0D"];
+S3 [shape=doublecircle];
+S2 -> S3 [label="\\x0A"];
+S4 -> S5 [label=" "];
+S4 -> S2 [label="\\x0D"];
+S5 -> S6 [label="[A-Za-z]+"];
+S5 -> S7 [label="[0-9]+"];
+S5 -> S1 [label="/|<password>|-lRat|[A-Za-z0-9]+.382.f"];
+S6 -> S1 [label="/xnwang/"];
+S6 -> S2 [label="\\x0D"];
+S7 -> S8 [label=","];
+S7 -> S2 [label="\\x0D"];
+S8 -> S1 [label="240,185,205,66,11|11,131,132,148,27"];
+}

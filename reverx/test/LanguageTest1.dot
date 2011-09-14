@@ -1,0 +1,15 @@
+digraph G {
+rankdir=LR;
+null [shape=plaintext label=""];
+null -> S0
+S0 -> S780 [label="user2"];
+S0 -> S526 [label="pathuser1@|user3@"];
+S780 -> S580 [label=">"];
+S780 -> S783 [label="@server."];
+S783 -> S537 [label="pt"];
+S783 -> S529 [label="lasige"];
+S537 -> S580 [label=">"];
+S526 -> S529 [label="server.lasige"];
+S529 -> S537 [label=".pt"];
+S580 -> S1 [label=" CRLF"];
+}

@@ -1,0 +1,22 @@
+digraph G {
+rankdir=LR;
+null [shape=plaintext label=""];
+null -> S0
+S0 -> S1 [label="b"];
+S0 -> S2 [label="a"];
+S0 [shape=doublecircle];
+S1 -> S0 [label="b"];
+S1 -> S1 [label="a"];
+S4 [shape=doublecircle];
+S2 -> S4 [label="a"];
+S5 [shape=doublecircle];
+S2 -> S5 [label="b"];
+S4 [shape=doublecircle];
+S3 -> S4 [label="b"];
+S5 [shape=doublecircle];
+S3 -> S5 [label="a"];
+S4 -> S2 [label="b"];
+S4 -> S3 [label="a"];
+S5 -> S2 [label="a"];
+S5 -> S3 [label="b"];
+}

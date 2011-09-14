@@ -1,0 +1,13 @@
+digraph G {
+rankdir=LR;
+null [shape=plaintext label=""];
+null -> S0
+S0 -> S1 [label="PASS"];
+S1 -> S2 [label="<SP>"];
+S2 -> S3 [label="<"];
+S3 -> S4 [label="password"];
+S4 -> S5 [label=">"];
+S5 -> S6 [label="\\x0D"];
+S7 [shape=doublecircle];
+S6 -> S7 [label="\\x0A"];
+}

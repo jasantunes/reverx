@@ -1,0 +1,19 @@
+digraph G {
+rankdir=LR;
+null [shape=plaintext label=""];
+null -> S0
+S0 -> S4 [label="PORT "];
+S0 -> S5 [label="CWD "];
+S0 -> S6 [label="LIST"];
+S0 -> S1 [label="PASV|RETR hijing1.382.f|USER anonymous|SYST|REST 0|TYPE [A-Za-z]+|QUIT|PASS <password>"];
+S1 -> S2 [label="\\x0D"];
+S3 [shape=doublecircle];
+S2 -> S3 [label="\\x0A"];
+S4 -> S1 [label="200,11,131,132,148,27|65,240,185,205,66,11"];
+S5 -> S7 [label="[A-Za-z]+"];
+S5 -> S1 [label="/"];
+S6 -> S1 [label=" -lRat"];
+S6 -> S2 [label="\\x0D"];
+S7 -> S2 [label="\\x0D"];
+S7 -> S1 [label="/xnwang/"];
+}

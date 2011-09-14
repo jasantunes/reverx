@@ -1,0 +1,24 @@
+digraph G {
+rankdir=LR;
+null [shape=plaintext label=""];
+null -> S2
+S2 -> S780 [label="user2"];
+S2 -> S525 [label="user3"];
+S2 -> S1027 [label="path"];
+S780 -> S580 [label=">"];
+S780 -> S781 [label="@"];
+S781 -> S782 [label="server"];
+S782 -> S783 [label="."];
+S783 -> S537 [label="pt"];
+S783 -> S529 [label="lasige"];
+S537 -> S580 [label=">"];
+S525 -> S526 [label="@"];
+S526 -> S527 [label="server"];
+S527 -> S528 [label="."];
+S528 -> S529 [label="lasige"];
+S529 -> S530 [label="."];
+S530 -> S537 [label="pt"];
+S1027 -> S1028 [label="user1"];
+S1028 -> S526 [label="@"];
+S580 -> S1 [label=" CRLF"];
+}
