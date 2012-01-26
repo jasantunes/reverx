@@ -49,11 +49,9 @@ public class Language {
     Language l = new Language();
     l.inferFromTraces(direction, messages, t1, t2);
     return l.automaton;
-
   }
 
-  public void inferFromTraces(boolean direction, Collection<List<Message>> messages, float T1,
-      int T2) {
+  public void inferFromTraces(boolean is_input, Collection<List<Message>> messages, float T1, int T2) {
     System.out.println("[ ] building automaton");
     // State.NEXT_ID = 0;
 
@@ -61,7 +59,7 @@ public class Language {
     for (List<Message> session : messages) {
       System.out.println("> _____");
       for (Message message : session) {
-        if (message.isRequest() == direction) {
+        if (message.isInput() == is_input) {
           System.out.println("> " + message);
           addSequence(automaton, message);
         }
@@ -69,9 +67,9 @@ public class Language {
     }
 
     int n = 0;
-    automaton.DRAW("lang" + (++n) + "-PTA", false);
+    // automaton.DRAW("lang" + (++n) + "-PTA", false);
     Operations.minimization(automaton);
-    automaton.DRAW("lang" + (++n) + "-PTA-minimized", false);
+    // automaton.DRAW("lang" + (++n) + "-PTA-minimized", false);
 
     /* Generalize and merge similar transitions. */
     System.out.println("[ ] generalizing automaton");
@@ -79,12 +77,12 @@ public class Language {
     if (generalize(automaton, T2)) {
       Operations.determinization(automaton);
       Operations.minimization(automaton);
-      automaton.DRAW("lang" + (++n) + "-generalized-T2", false);
+      // automaton.DRAW("lang" + (++n) + "-generalized-T2", false);
     }
     while (generalize(automaton, T1)) {
       Operations.determinization(automaton);
       Operations.minimization(automaton);
-      automaton.DRAW("lang" + (++n) + "-generalized-T1", false);
+      // automaton.DRAW("lang" + (++n) + "-generalized-T1", false);
     }
 
     int new_total = automaton.getAllStates().size();
@@ -94,11 +92,19 @@ public class Language {
     /* Concatenate linear transitions and states. */
     concatUniqueLinearStates(automaton);
     automaton.resetAllStates();
-    automaton.DRAW("lang" + (++n) + "-generalized", false);
+    // automaton.DRAW("lang" + (++n) + "-generalized", false);
 
   }
 
-  public static void addSequence(Automaton<RegEx> automaton, Message message) {
+  /**
+   * Creates and adds a new sequence by matching the largest substring of the
+   * message. Problem with this version is that it can append sequences
+   * splitting a field. Eg: of -> " " -> the -> ... and message:
+   * "officials of other agencies..." would be appended to: of -> ficials ->
+   * ..., splitting of-ficials
+   */
+  @Deprecated
+  public static void addSequence(Automaton<RegEx> automaton, String message) {
     State<RegEx> state = automaton.getInitialState();
     int message_offset = 0;
 
@@ -128,6 +134,48 @@ public class Language {
       new_t.setFreq(1);
       state.getTransitions().add(new_t);
       state = new_state;
+    }
+    state.setFinal(true);
+  }
+
+  /**
+   * Creates and adds a new sequence by tokenizing the message.
+   */
+  public static void addSequence(Automaton<RegEx> automaton, Message message) {
+    State<RegEx> state = automaton.getInitialState();
+    List<RegEx> sequence_of_symbols = RegEx.tokenize(message, 0);
+    int offset = 0;
+
+    // Get common prefix.
+    while (state.isFinal() == false && offset < sequence_of_symbols.size()) {
+      RegEx symbol = sequence_of_symbols.get(offset);
+      boolean found = false;
+
+      for (Transition<RegEx> t : state) {
+        if (t.getSymbol().equals(symbol)) {
+          t.setFreq(t.getFreq() + 1);
+          state = t.getState();
+          offset++;
+          found = true;
+          break; // go to next state
+        }
+      }
+
+      // break if not found
+      if (!found)
+        break;
+    }
+
+    // Add remaining sequence of symbols to new path.
+    while (offset < sequence_of_symbols.size()) {
+      RegEx symbol = sequence_of_symbols.get(offset);
+      State<RegEx> new_state = new State<RegEx>();
+      automaton.getAllStates().add(new_state);
+      Transition<RegEx> new_t = new Transition<RegEx>(symbol, new_state);
+      new_t.setFreq(1);
+      state.getTransitions().add(new_t);
+      state = new_state;
+      offset++;
     }
     state.setFinal(true);
   }
@@ -225,8 +273,10 @@ public class Language {
       if (total_transitions >= MIN_TRANSITIONS) {
         System.out.println("\tGEN!");
         for (Transition<RegEx> t : s) {
-          if (RegEx.IS_TEXT_BASED_PROTOCOL)
-            dirty |= ((RegEx)t.getSymbol()).generalize();
+
+          if (RegEx.hasBinarySupport())
+            // simplify parameter characterization
+            dirty |= ((RegEx)t.getSymbol()).generalize(false);
           else
             dirty |= ((RegEx)t.getSymbol()).generalize_BINARY();
         }
@@ -261,8 +311,9 @@ public class Language {
       if (ratio_different_transitions >= MIN_RATIO_TRANSITIONS_OVER_TOTAL_FREQ) {
         System.out.println("\tGEN!");
         for (Transition<RegEx> t : s) {
-          if (RegEx.IS_TEXT_BASED_PROTOCOL)
-            dirty |= ((RegEx)t.getSymbol()).generalize();
+          if (RegEx.hasBinarySupport())
+            // simplify parameter characterization
+            dirty |= ((RegEx)t.getSymbol()).generalize(false);
           else
             dirty |= ((RegEx)t.getSymbol()).generalize_BINARY();
         }
@@ -277,8 +328,7 @@ public class Language {
   // //////////////////////////////////////////////////////////////////
 
   private static void printUsage(OptionsExtended options) {
-    System.out
-        .println("Usage: java ProtocolLanguage [OPTIONS...] PORT T1 T2 INPUT_LANGUAGE OUTPUT_LANGUAGE");
+    System.out.println("Usage: java Language [OPTIONS...] T1 T2 LANGUAGE [\"expression\"]");
     System.out.println();
     System.out.println("Creates an automaton that represents the protocol state machine "
         + "from messages taken from traces (text or pcap file) that are recognized by "
@@ -300,13 +350,16 @@ public class Language {
     // main_debug(args); System.exit(0);
 
     OptionsExtended opt = new OptionsExtended();
-    opt.setOption("--stateless=", "-s", "\tIf the server/protocol is stateless.");
-    opt.setOption("--binary=", "-b", "\tIf the server/protocol is stateless.");
-    opt.setOption("--txt=", "-t", "FILE\tText file with a packet payload in each line");
-    opt.setOption("--pcap=", "-p", "FILE\tPacket capture file in tcpdump format");
-    opt.setOption("--sessions=", null, "FILE\tSessions object file");
-    opt.setOption("--max=", "-m", "NUMBER\tMaximum number of messages to process");
-    opt.setOption("--delim=", null, "\tDelimiter characters.");
+    opt.setOption("--txt=", "-t", "FILE\ttext file with a packet payload in each line");
+    opt.setOption("--pcap=", "-p", "FILE\tpacket capture file in tcpdump format");
+    opt.setOption("--sessions=", null, "FILE\tsessions object file");
+    opt.setOption("--max=", "-m", "NUMBER\tmaximum number of messages to process");
+    opt.setOption("--delim=", null, "STRING\tdelimiter characters (text-based protocols only)");
+    opt.setOption("--stateless=", "-s", "\tif the server/protocol is stateless");
+    opt.setOption("--binary=", "-b", "\t\tbinary-based protocols");
+    opt.setOption("--ip=", "--ip", "\t\tIP payload instead of TCP/UDP");
+    opt.setOption("--snaplen=", null,
+        "BYTES\tmaximum bytes to extract from payload (useful to extract headers)");
 
     Automaton.DEBUG = true;
 
@@ -315,20 +368,14 @@ public class Language {
     try {
 
       /* Parse command-line arguments. */
-      int PROTOCOL_PORT = opt.getValueInteger();
       float T1 = opt.getValueFloat();
       int T2 = opt.getValueInteger();
-      String INPUT_LANG = opt.getValueString();
-      String OUTPUT_LANG = null;
-      try {
-        // optional
-        OUTPUT_LANG = opt.getValueString();
-      } catch (OptionsException e) {
-        OUTPUT_LANG = null;
-      }
+      String LANGUAGE = opt.getValueString();
+      // Optional expression
+      String EXPRESSION = (opt.getTotalRemainingArgs() > 0) ? opt.getValueString() : null;
 
-      RegEx.IS_TEXT_BASED_PROTOCOL = !opt.getValueBoolean("-b");
-
+      if (opt.getValueBoolean("-b"))
+        RegEx.setBinarySupport();
       boolean stateless = opt.getValueBoolean("-s");
       int MAX = -1;
       if (opt.getValueBoolean("-m"))
@@ -352,8 +399,11 @@ public class Language {
           traces = new TextFile(file);
         } else {
           file = opt.getValueString("--pcap=");
-          traces = new PcapFile(opt.getValueString("--pcap="), "port " + PROTOCOL_PORT,
-              PROTOCOL_PORT, MSG_DELIMITER);
+          traces = new PcapFile(opt.getValueString("--pcap="), EXPRESSION, null, MSG_DELIMITER);
+          if (opt.getValueBoolean("--ip"))
+            ((PcapFile)traces).setPayloadIp(true);
+          if (opt.getValueBoolean("--snaplen="))
+            ((PcapFile)traces).setSnaplen(opt.getValueInteger("--snaplen="));
         }
 
         // Get sessions from traces and save to .sessions file.
@@ -386,24 +436,20 @@ public class Language {
       // sessions = temp;
 
       System.out.println("# raw sessions:\t" + sessions.size());
-      { // INPUT LANGUAGE
-        State.NEXT_ID = 0;
-        Automaton.DEBUG_FILENAME = INPUT_LANG;
-        Language input_language = new Language();
-        input_language.inferFromTraces(true, sessions, T1, T2);
-        input_language.automaton.resetAllStates();
-        input_language.automaton.saveToFile(INPUT_LANG);
-        input_language.automaton.drawAutomaton(INPUT_LANG, false);
-      }
+      State.NEXT_ID = 0;
+      Automaton.DEBUG_FILENAME = LANGUAGE;
+      Language language = new Language();
+      language.inferFromTraces(true, sessions, T1, T2);
+      language.automaton.resetAllStates();
+      language.automaton.saveToFile(LANGUAGE);
+      language.automaton.drawAutomaton(LANGUAGE, false);
 
-      if (OUTPUT_LANG != null) { // OUTPUT LANGUAGE
-        State.NEXT_ID = 0;
-        Automaton.DEBUG_FILENAME = OUTPUT_LANG;
-        Language output_language = new Language();
-        output_language.inferFromTraces(false, sessions, T1, T2);
-        output_language.automaton.resetAllStates();
-        output_language.automaton.saveToFile(OUTPUT_LANG);
-        output_language.automaton.drawAutomaton(OUTPUT_LANG, false);
+      System.out.println("# Printing all paths");
+      ArrayList<ArrayList<RegEx>> all_paths = language.automaton.getListofPaths();
+      for (ArrayList<RegEx> path : all_paths) {
+        for (RegEx symbol : path)
+          System.out.print(symbol);
+        System.out.println();
       }
 
       System.out.println("[ ] DONE!");

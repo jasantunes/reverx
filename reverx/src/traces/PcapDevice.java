@@ -43,9 +43,8 @@ public class PcapDevice extends PcapFile {
   // (Runtime.getRuntime().addShutdownHook())
   protected AbstractMap<Connection, List<Message>> sessions = null;
 
-  public PcapDevice(String device, String filter_expression, int protocol_port,
-      String delimiter_regex) {
-    super(device, filter_expression, protocol_port, delimiter_regex);
+  public PcapDevice(String device, String expr, String server_addr, String delimiter_regex) {
+    super(device, expr, server_addr, delimiter_regex);
     sessions = new TreeMap<Connection, List<Message>>(); // sorted
   }
 
@@ -61,6 +60,7 @@ public class PcapDevice extends PcapFile {
     pcap = Pcap.openLive(filename, snaplen, flags, timeout, errbuf);
     if (pcap == null)
       throw new PcapClosedException("Error while opening device for capture: " + errbuf.toString());
+
     if (filter != null)
       setFilter(filter);
   }

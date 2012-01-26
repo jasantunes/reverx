@@ -45,11 +45,11 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
   private static final Pattern PATTERN_QUOTE = Pattern.compile("\\\\Q(.*?)\\\\E", FLAGS);
 
   /* Protocol definitions. */
-  public static boolean IS_TEXT_BASED_PROTOCOL = true;
-  private static final Pattern PATTERN_TOKEN = (IS_TEXT_BASED_PROTOCOL) ?
+  private static boolean IS_TEXT_BASED_PROTOCOL = true;
+  private static Pattern PATTERN_TOKEN = (IS_TEXT_BASED_PROTOCOL) ?
   // text- or binary-based initial field division
-  Pattern.compile(" |\\r\\n", FLAGS) // every space or CRLF
-      : Pattern.compile(".", FLAGS); // every byte
+  Pattern.compile(" |\\r\\n", FLAGS) // at every space or CRLF
+      : Pattern.compile(".", FLAGS); // at every byte
 
   /* For binary-based protocols only. */
   private boolean is_generalized_BINARY = false;
@@ -66,6 +66,28 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
   public RegEx(CharSequence data) {
     this(quote(data));
     length_BINARY = data.length();
+  }
+
+  public static void setBinarySupport() {
+    IS_TEXT_BASED_PROTOCOL = false;
+    PATTERN_TOKEN = Pattern.compile(".", FLAGS); // at every byte
+  }
+
+  public static boolean hasBinarySupport() {
+    return IS_TEXT_BASED_PROTOCOL;
+  }
+
+  /**
+   * Generalizes the regular expression (TEXT-BASED PROTOCOL VERSION).
+   * 
+   * @param over_generalized simplify parameter characterization
+   */
+  public boolean generalize(boolean over_generalized) {
+    if (!over_generalized)
+      return generalize();
+    else
+      _pattern = Pattern.compile(".+", FLAGS);
+    return true;
   }
 
   /**
@@ -108,7 +130,7 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
    */
   public boolean generalize_BINARY() {
     if (length_BINARY > 0 && is_generalized_BINARY == false) {
-      _pattern = Pattern.compile(".{" + length_BINARY + "}+", FLAGS);
+      _pattern = Pattern.compile(".{" + length_BINARY + "}", FLAGS);
       is_generalized_BINARY = true;
       return true;
     }
@@ -290,8 +312,8 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
     /* Expand regular expressions in instances. */
     // ArrayList<ArrayList<String>> expanded is in the form of:
     // array of tokens where each token has all expansions for that token.
-    ArrayList<ArrayList<String>> all_tokens_expansions = new ArrayList<ArrayList<String>>(tokens
-        .size());
+    ArrayList<ArrayList<String>> all_tokens_expansions = new ArrayList<ArrayList<String>>(
+        tokens.size());
     for (String token : tokens) {
       ArrayList<String> token_expansion = new ArrayList<String>();
 
@@ -314,9 +336,8 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
         for (StringBuilder sb : all_instances)
           sb.append(s);
       } else {
-        ArrayList<StringBuilder> all_instances_tmp = new ArrayList<StringBuilder>(all_instances
-            .size()
-            * token.size());
+        ArrayList<StringBuilder> all_instances_tmp = new ArrayList<StringBuilder>(
+            all_instances.size() * token.size());
         for (StringBuilder sb : all_instances) {
           for (String s : token)
             all_instances_tmp.add(new StringBuilder(sb + s));
@@ -538,13 +559,18 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
     boolean quoting = false;
     for (int i = 0; i < data.length(); i++) {
       char b = data.charAt(i);
-      if (isASCIIPrintable((byte)b)) {
+
+      // printable (text)
+      if (RegEx.IS_TEXT_BASED_PROTOCOL && isASCIIPrintable((byte)b)) {
         if (!quoting) {
           sb.append("\\Q"); // quote ascii character.
           quoting = true;
         }
         sb.append((char)b); // append character
-      } else {
+      }
+
+      // non-printable (binary)
+      else {
         if (quoting) {
           sb.append("\\E"); // unquote ascii character
           quoting = false;

@@ -36,7 +36,7 @@ import java.util.*;
 
 public class TextFile implements TracesInterface {
   private BufferedInputStream _input;
-  private byte[] _buffer = new byte[1024];
+  private byte[] _buffer = new byte[1000000];
   private String _filename;
 
   public TextFile(String filename) {

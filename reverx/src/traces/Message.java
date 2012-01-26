@@ -46,7 +46,7 @@ public class Message extends ByteChars implements java.io.Serializable {
     this.len = data.length;
   }
 
-  public boolean isRequest() {
+  public boolean isInput() {
     return is_request;
   }
 

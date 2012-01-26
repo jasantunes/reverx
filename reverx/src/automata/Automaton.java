@@ -233,6 +233,24 @@ public class Automaton<T extends Symbol> implements java.io.Serializable {
     System.out.println();
   }
 
+  private void getListofPaths_rec(ArrayList<T> current_path, State<T> state,
+      ArrayList<ArrayList<T>> paths) {
+    if (state.isFinal())
+      paths.add(current_path);
+    for (Transition<T> t : state._transitions) {
+      ArrayList<T> subpath = new ArrayList<T>(current_path);
+      subpath.add(t._symbol);
+      getListofPaths_rec(subpath, t._dest_state, paths);
+    }
+  }
+
+  public ArrayList<ArrayList<T>> getListofPaths() {
+    ArrayList<ArrayList<T>> paths = new ArrayList<ArrayList<T>>();
+    getListofPaths_rec(new ArrayList<T>(), _initial_state, paths);
+    return paths;
+
+  }
+
   private void add_graph_dot_nodes(ArrayList<String> dot_output, State<T> from, State<T> to,
       String from_label) {
     String from_toString = from.toString();

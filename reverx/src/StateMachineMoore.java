@@ -79,8 +79,8 @@ public class StateMachineMoore implements java.io.Serializable {
         return 0;
     }
 
-    HashSet<Transition<MessageType>> common_transitions = new HashSet<Transition<MessageType>>(s0
-        .getTransitions());
+    HashSet<Transition<MessageType>> common_transitions = new HashSet<Transition<MessageType>>(
+        s0.getTransitions());
     common_transitions.retainAll(s1.getTransitions());
     // HashSet<MessageType> common_transitions = new
     // HashSet<MessageType>(s0.getTransitions().size());
@@ -188,6 +188,7 @@ public class StateMachineMoore implements java.io.Serializable {
    * be identical.
    * 
    * @return True if there has been some merges (may be required to run again)
+   *         TODO: add check for states without causal relation
    */
   private static boolean reduceII(Automaton<MessageType> automaton) {
     System.out.println("[ ] reduceII()");
@@ -297,7 +298,7 @@ public class StateMachineMoore implements java.io.Serializable {
     List<MessageType> sequence = new ArrayList<MessageType>();
     for (Message m : session) {
       // Only process input messages.
-      if (m.isRequest() == true) {
+      if (m.isInput()) {
         // RegEx msg_type = RegEx.getInferredMessageType(language, m);
         List<Transition<RegEx>> path_in_language = RegEx.getPath(language, m);
         if (path_in_language == null)
@@ -332,11 +333,15 @@ public class StateMachineMoore implements java.io.Serializable {
   // /////////////////////////////////////////////////////////////////////////////
   public static void printUsage(OptionsExtended options) {
     System.out
-        .println("Usage: java StateMachineMoore [OPTIONS...] SERVER_PORT IN_LANG OUT_LANG STATEMACHINE");
+        .println("Usage: java StateMachineMoore [OPTIONS...] LANGUAGE STATEMACHINE \"expr1\" \"expr2\"");
     System.out.println();
     System.out.println("Creates an automaton that represents the protocol state machine "
         + "from messages taken from traces (text or pcap file) that are recognized by "
         + "the AUTOMATON message formats.");
+    System.out.println();
+    System.out.println("LANGUAGE\t\tlanguage file");
+    System.out.println("STATEMACHINE\t\t output file");
+    System.out.println("expr\t\tfilter expression to extract messages from pcap file");
     System.out.println();
     System.out.println("Options:");
     System.out.println(options.getUsageOptions());
@@ -357,7 +362,7 @@ public class StateMachineMoore implements java.io.Serializable {
     opt.setOption("--stateless=", "-s", "\tIf the server/protocol is stateless.");
     opt.setOption("--txt=", "-t", "FILE\tText file with a packet payload in each line");
     opt.setOption("--pcap=", "-p", "FILE\tPacket capture file in tcpdump format");
-    opt.setOption("--sessions=", null, "FILE\tSessions object file");
+    // opt.setOption("--sessions=", null, "FILE\tSessions object file");
     opt.setOption("--max=", "-m", "NUMBER\tMaximum number of messages to process");
     opt.setOption("--delim=", "-d", "Message delimiter (eg, \"\\r\\n\")");
 
@@ -374,14 +379,14 @@ public class StateMachineMoore implements java.io.Serializable {
         MSG_DELIMITER = Utils.toJavaString(MSG_DELIMITER);
         System.out.println("MSG_DELIMITER: " + MSG_DELIMITER);
       }
-
-      int PROTOCOL_PORT = opt.getValueInteger();
-      String INPUT_LANG = opt.getValueString();
+      String LANGUAGE = opt.getValueString();
       String OUTFILE = opt.getValueString();
+      // Optional expression
+      String EXPRESSION = (opt.getTotalRemainingArgs() > 0) ? opt.getValueString() : null;
       Automaton.DEBUG = true;
 
       /* Load inferred input languages. */
-      Automaton<RegEx> input_language = Automaton.loadFromFile(INPUT_LANG);
+      Automaton<RegEx> input_language = Automaton.loadFromFile(LANGUAGE);
       State.NEXT_ID = 0;
 
       /* Load sessions (extracted previously from traces). */
@@ -393,8 +398,7 @@ public class StateMachineMoore implements java.io.Serializable {
         sessions = traces.getSessions(!stateless);
         traces.close();
       } else if (opt.getValueBoolean("--pcap=")) {
-        traces = new PcapFile(opt.getValueString("--pcap="), "port " + PROTOCOL_PORT,
-            PROTOCOL_PORT, MSG_DELIMITER);
+        traces = new PcapFile(opt.getValueString("--pcap="), EXPRESSION, null, MSG_DELIMITER);
         traces.open();
         sessions = traces.getSessions(!stateless);
         traces.close();

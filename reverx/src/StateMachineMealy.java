@@ -59,13 +59,12 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
     List<MessageType> sequence = new ArrayList<MessageType>();
     List<LanguageMessageType> input = new ArrayList<LanguageMessageType>();
     List<LanguageMessageType> output = new ArrayList<LanguageMessageType>();
-    boolean look_for_output = false;
 
     /* Process each message of a session. */
+    boolean look_for_output = false;
     for (Message m : session) {
 
-      // Input message.
-      if (m.isRequest()) {
+      if (m.isInput()) {
         System.out.println("> " + m.toString());
         if (look_for_output) {
           // We have a complete <input,output> symbol.
@@ -101,6 +100,32 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
     return sequence;
   }
 
+  // /////////////////////////////////////////////////////////////////////////////
+  public static void printUsage(OptionsExtended options) {
+    System.out
+        .println("Usage: java StateMachineMealy [OPTIONS...] LANG1 LANG2 IP:PORT STATEMACHINE [\"expr\"]");
+    System.out.println();
+    System.out.println("Creates an automaton that represents the protocol state machine "
+        + "from messages taken from traces (text or pcap file) that are recognized by "
+        + "the AUTOMATON message formats.");
+    System.out.println();
+    System.out.println("LANG1\t\tinput language file (client)");
+    System.out.println("LANG2\t\toutput language file (server)");
+    System.out.println("IP:PORT\t\tfilter output messages by the address (*:* = ANY)");
+    System.out.println("STATEMACHINE\t\t output file");
+    System.out.println("expr\t\tfilter expression to extract messages from pcap file (optional)");
+    System.out.println();
+    System.out.println("Options:");
+    System.out.println(options.getUsageOptions());
+    System.out.println("Report bugs to <jantunes@di.fc.ul.pt>.");
+    // expressions:
+    // http (doesn't filter non-http or continuation...): tcp dst port 3128
+    // and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)
+    // ftp: dst port 21
+    // pop: dst port 110
+    // msn: dst port 1863
+  }
+
   @SuppressWarnings("unchecked")
   public static void main(String[] args) {
 
@@ -109,12 +134,12 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
 
     // main_debug(args); System.exit(0);
     OptionsExtended opt = new OptionsExtended();
-    opt.setOption("--stateless=", "-s", "\tIf the server/protocol is stateless.");
-    opt.setOption("--txt=", "-t", "FILE\tText file with a packet payload in each line");
-    opt.setOption("--pcap=", "-p", "FILE\tPacket capture file in tcpdump format");
-    opt.setOption("--sessions=", null, "FILE\tSessions object file");
-    opt.setOption("--max=", "-m", "NUMBER\tMaximum number of messages to process");
-    opt.setOption("--delim=", "-d", "Message delimiter (eg, \"\\r\\n\")");
+    opt.setOption("--txt=", "-t", "FILE\ttext file with a packet payload in each line");
+    opt.setOption("--pcap=", "-p", "FILE\tpacket capture file in tcpdump format");
+    // opt.setOption("--sessions=", null, "FILE\tSessions object file");
+    opt.setOption("--max=", "-m", "NUMBER\tmaximum number of messages to process");
+    opt.setOption("--delim=", "-d", "message delimiter (eg, \"\\r\\n\")");
+    opt.setOption("--stateless=", "-s", "\tif the protocol is stateless");
 
     /* Check command-line parameters. */
     opt.parseArgs(args);
@@ -129,34 +154,46 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
         MSG_DELIMITER = Utils.toJavaString(MSG_DELIMITER);
         System.out.println("MSG_DELIMITER: " + MSG_DELIMITER);
       }
-      int PROTOCOL_PORT = opt.getValueInteger();
-      String INPUT_LANG = opt.getValueString();
-      String OUTPUT_LANG = opt.getValueString();
+      String LANG1 = opt.getValueString();
+      String LANG2 = opt.getValueString();
+      String SERVER_ADDR = opt.getValueString();
       String OUTFILE = opt.getValueString();
+      // Optional expression
+      String EXPRESSION = (opt.getTotalRemainingArgs() > 0) ? opt.getValueString() : null;
       Automaton.DEBUG = true;
 
       /* Load inferred input languages. */
-      Automaton<RegEx> input_language = Automaton.loadFromFile(INPUT_LANG);
-      Automaton<RegEx> output_language = Automaton.loadFromFile(OUTPUT_LANG);
+      Automaton<RegEx> input_language = Automaton.loadFromFile(LANG1);
+      Automaton<RegEx> output_language = Automaton.loadFromFile(LANG2);
 
       /* Load sessions (extracted previously from traces). */
       Collection<List<Message>> sessions = null;
       TracesInterface traces = null;
-      if (opt.getValueBoolean("--txt=")) {
+
+      // Packet capture files.
+      if (opt.getValueBoolean("--pcap=")) {
+        traces = new PcapFile(opt.getValueString("--pcap="), EXPRESSION, SERVER_ADDR, MSG_DELIMITER);
+        traces.open();
+        sessions = traces.getSessions(!stateless);
+        traces.close();
+      }
+
+      // Cached sessions.
+      else if (opt.getValueBoolean("--sessions=")) {
+        sessions = (Collection<List<Message>>)utils.Utils.readFromFile(opt
+            .getValueString("--sessions="));
+      }
+
+      // Text files (DEBUG).
+      else if (opt.getValueBoolean("--txt=")) {
         traces = new TextFile(opt.getValueString("--txt="));
         traces.open();
         sessions = traces.getSessions(!stateless);
         traces.close();
-      } else if (opt.getValueBoolean("--pcap=")) {
-        traces = new PcapFile(opt.getValueString("--pcap="), "port " + PROTOCOL_PORT,
-            PROTOCOL_PORT, MSG_DELIMITER);
-        traces.open();
-        sessions = traces.getSessions(!stateless);
-        traces.close();
-      } else if (opt.getValueBoolean("--sessions=")) {
-        sessions = (Collection<List<Message>>)utils.Utils.readFromFile(opt
-            .getValueString("--sessions="));
-      } else {
+      }
+
+      // ERROR!
+      else {
         throw new OptionsException(OptionsException.Types.MISSING_PARAMETER, "Missing traces file.");
       }
 
