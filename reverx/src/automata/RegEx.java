@@ -68,12 +68,16 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
     length_BINARY = data.length();
   }
 
-  public static void setBinarySupport() {
-    IS_TEXT_BASED_PROTOCOL = false;
-    PATTERN_TOKEN = Pattern.compile(".", FLAGS); // at every byte
+  public static void setTextBasedSupport(boolean text_based) {
+    IS_TEXT_BASED_PROTOCOL = text_based;
+    if (text_based)
+      PATTERN_TOKEN = Pattern.compile("\\\\Q(.*?)\\\\E", FLAGS);
+    else
+      // treat each byte as a single field initially
+      PATTERN_TOKEN = Pattern.compile(".", FLAGS);
   }
 
-  public static boolean hasBinarySupport() {
+  public static boolean hasTextBasedSupport() {
     return IS_TEXT_BASED_PROTOCOL;
   }
 

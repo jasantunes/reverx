@@ -90,16 +90,15 @@ public class LanguageTest {
   public void inferFromTracesTest() {
     /* Parameters: input */
     String traces_filename = "test/traces.pcap";
-    int protocol_port = 21;
     float T1 = 0.5f;
     int T2 = 30;
     /* Parameters: output */
-    String input_lang = "test/lang.in";
-    String output_lang = "test/lang.out";
+    String input_lang = "test/in.lang";
+    String output_lang = "test/out.lang";
 
     try {
       /* Extract sessions. */
-      PcapFile traces = new PcapFile(traces_filename, "port " + protocol_port, protocol_port, null);
+      PcapFile traces = new PcapFile(traces_filename, "port 21", "*:21", null);
       traces.open();
       Collection<List<Message>> sessions = traces.getSessions(true);
       traces.close();

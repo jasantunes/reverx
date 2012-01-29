@@ -38,7 +38,6 @@ public class StateMachineTest {
   public void testInferFromTraces() {
     /* Parameters. */
     String traces_filename = "test/traces.pcap";
-    int protocol_port = 21;
     String input_language_filename = "test/1-inlang";
     String output_language_filename = "test/2-outlang";
     String output_state_machine_filename = "test/3-statemachine";
@@ -47,7 +46,7 @@ public class StateMachineTest {
 
     try {
       /* Extract sessions. */
-      PcapFile traces = new PcapFile(traces_filename, "port " + protocol_port, protocol_port, null);
+      PcapFile traces = new PcapFile(traces_filename, "port 21", "*:21", null);
       traces.open();
       System.out.println("[ ] sessions = traces.getSessions();");
       Collection<List<Message>> sessions = traces.getSessions(true);

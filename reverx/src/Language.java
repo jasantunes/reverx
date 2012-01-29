@@ -90,7 +90,8 @@ public class Language {
         + (int)((1 - (new_total / ((float)old_total))) * 100) + "% smaler)");
 
     /* Concatenate linear transitions and states. */
-    concatUniqueLinearStates(automaton);
+    if (RegEx.hasTextBasedSupport())
+      concatUniqueLinearStates(automaton);
     automaton.resetAllStates();
     // automaton.DRAW("lang" + (++n) + "-generalized", false);
 
@@ -274,8 +275,7 @@ public class Language {
         System.out.println("\tGEN!");
         for (Transition<RegEx> t : s) {
 
-          if (RegEx.hasBinarySupport())
-            // simplify parameter characterization
+          if (RegEx.hasTextBasedSupport())
             dirty |= ((RegEx)t.getSymbol()).generalize(false);
           else
             dirty |= ((RegEx)t.getSymbol()).generalize_BINARY();
@@ -311,8 +311,7 @@ public class Language {
       if (ratio_different_transitions >= MIN_RATIO_TRANSITIONS_OVER_TOTAL_FREQ) {
         System.out.println("\tGEN!");
         for (Transition<RegEx> t : s) {
-          if (RegEx.hasBinarySupport())
-            // simplify parameter characterization
+          if (RegEx.hasTextBasedSupport())
             dirty |= ((RegEx)t.getSymbol()).generalize(false);
           else
             dirty |= ((RegEx)t.getSymbol()).generalize_BINARY();
@@ -375,7 +374,7 @@ public class Language {
       String EXPRESSION = (opt.getTotalRemainingArgs() > 0) ? opt.getValueString() : null;
 
       if (opt.getValueBoolean("-b"))
-        RegEx.setBinarySupport();
+        RegEx.setTextBasedSupport(false);
       boolean stateless = opt.getValueBoolean("-s");
       int MAX = -1;
       if (opt.getValueBoolean("-m"))
