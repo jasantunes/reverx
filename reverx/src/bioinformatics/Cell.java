@@ -56,12 +56,13 @@ public class Cell {
     this._symbol = node;
   }
 
-  public static Cell[] mergeBestCells(Cell[] scores0, Cell[] scores1) {
-    for (int i = 0; i < scores0.length; i++)
-      scores0[i] = (scores1[i].globalSimilarity() > scores0[i].globalSimilarity()) ? scores1[i]
-          : scores0[i];
-    return scores0;
-  }
+  // public static Cell[] mergeBestCells(Cell[] scores0, Cell[] scores1) {
+  // for (int i = 0; i < scores0.length; i++)
+  // scores0[i] = (scores1[i].globalSimilarity() >
+  // scores0[i].globalSimilarity()) ? scores1[i]
+  // : scores0[i];
+  // return scores0;
+  // }
 
   @Override
   public String toString() {

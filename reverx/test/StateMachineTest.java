@@ -53,24 +53,22 @@ public class StateMachineTest {
       traces.close();
 
       /* Infer input language. */
-      Language input_language = new Language();
       System.out.println("[ ] input_language.inferFromTraces(true, sessions, " + T1 + ", " + T2
           + ");");
-      input_language.inferFromTraces(true, sessions, T1, T2);
-      input_language.automaton.drawAutomaton(input_language_filename, false);
+      Language input_language = new Language(true, sessions, T1, T2);
+      input_language.drawAutomaton(input_language_filename, false);
 
       /* Infer output language. */
       State.NEXT_ID = 0;
-      Language output_language = new Language();
       System.out.println("[ ] output_language.inferFromTraces(false, sessions, " + T1 + ", " + T2
           + ");");
-      output_language.inferFromTraces(false, sessions, T1, T2);
-      output_language.automaton.drawAutomaton(output_language_filename, false);
+      Language output_language = new Language(false, sessions, T1, T2);
+      output_language.drawAutomaton(output_language_filename, false);
 
       /* Infer state machine. */
-      StateMachineMealy state_machine = new StateMachineMealy(input_language, output_language);
-      state_machine.inferFromTraces(sessions);
-      state_machine.automaton.drawAutomaton(output_state_machine_filename, false);
+      StateMachineMealy state_machine = new StateMachineMealy(input_language, output_language,
+          sessions);
+      state_machine.drawAutomaton(output_state_machine_filename, false);
 
     } catch (Exception e) {
       // TODO Auto-generated catch block

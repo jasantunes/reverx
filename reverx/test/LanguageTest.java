@@ -104,15 +104,13 @@ public class LanguageTest {
       traces.close();
 
       /* Infer input language. */
-      Language input_language = new Language();
-      input_language.inferFromTraces(true, sessions, T1, T2);
-      input_language.getAutomaton().drawAutomaton(input_lang, false);
+      Language input_language = new Language(true, sessions, T1, T2);
+      input_language.drawAutomaton(input_lang, false);
 
       /* Infer output language. */
       // State.NEXT_ID = 0;
-      Language output_language = new Language();
-      output_language.inferFromTraces(false, sessions, T1, T2);
-      output_language.getAutomaton().drawAutomaton(output_lang, false);
+      Language output_language = new Language(false, sessions, T1, T2);
+      output_language.drawAutomaton(output_lang, false);
 
     } catch (Exception e) {
       e.printStackTrace();

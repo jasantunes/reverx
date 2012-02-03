@@ -31,7 +31,6 @@
 
 package traces;
 
-import java.util.List;
 import automata.RegEx;
 
 public class ByteChars implements CharSequence, java.io.Serializable {
@@ -92,12 +91,12 @@ public class ByteChars implements CharSequence, java.io.Serializable {
     return sb.toString();
   }
 
-  public void append(ByteChars other) {
-    ByteChars concatenated = ByteChars.concat(this, other);
-    this.buf = concatenated.buf;
-    this.len = concatenated.len;
-    this.off = concatenated.off;
-  }
+  // public void append(ByteChars other) {
+  // ByteChars concatenated = ByteChars.concat(this, other);
+  // this.buf = concatenated.buf;
+  // this.len = concatenated.len;
+  // this.off = concatenated.off;
+  // }
 
   // /*
   // * We use ISO-8859-1 because it maps every byte in the range 0x00..0xFF to a
@@ -141,20 +140,20 @@ public class ByteChars implements CharSequence, java.io.Serializable {
     return new ByteChars(data);
   }
 
-  public static ByteChars concat(List<ByteChars> messages) {
-    // get len
-    int len = 0;
-    for (ByteChars b : messages)
-      len += b.len;
-    byte[] data = new byte[len];
-
-    // copy all elements to array
-    int off = 0;
-    for (ByteChars b : messages) {
-      System.arraycopy(b.buf, b.off, data, off, b.len);
-      off += b.len;
-    }
-    return new ByteChars(data);
-  }
+  // public static ByteChars concat(List<ByteChars> messages) {
+  // // get len
+  // int len = 0;
+  // for (ByteChars b : messages)
+  // len += b.len;
+  // byte[] data = new byte[len];
+  //
+  // // copy all elements to array
+  // int off = 0;
+  // for (ByteChars b : messages) {
+  // System.arraycopy(b.buf, b.off, data, off, b.len);
+  // off += b.len;
+  // }
+  // return new ByteChars(data);
+  // }
 
 }

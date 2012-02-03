@@ -84,58 +84,6 @@ public class Automaton<T extends Symbol> implements java.io.Serializable {
       s._id = State.NEXT_ID++;
   }
 
-  public List<Transition<T>> getPath(List<T> sequence) {
-    List<Transition<T>> path = new ArrayList<Transition<T>>();
-    State<T> state = _initial_state;
-
-    for (T symbol : sequence) {
-      // Check if any transition accepts symbol.
-      for (Transition<T> t : state) {
-        if (t.equals(symbol)) {
-          path.add(t);
-          state = t._dest_state;
-          continue;
-        }
-      }
-      // No transitions were found accepting symbol.
-      return null;
-    }
-
-    return path;
-  }
-
-  // private static <T extends Symbol> void getAllPaths_rec(State<T> from_state,
-  // List<Transition<T>> current_path, List<List<Transition<T>>> out_all_paths)
-  // {
-  // if (from_state._is_final)
-  // out_all_paths.add(current_path);
-  //
-  // for (Transition<T> t : from_state._transitions) {
-  // // ArrayList<Transition<T>> new_path = (ArrayList<Transition<T>>)
-  // // current_path.clone();
-  // ArrayList<Transition<T>> new_path = new
-  // ArrayList<Transition<T>>(current_path);
-  // new_path.add(t);
-  // getAllPaths_rec(t._dest_state, new_path, out_all_paths);
-  // }
-  // }
-  //
-  // public List<List<Transition<T>>> getAllPaths() {
-  // List<List<Transition<T>>> all_paths = new ArrayList<List<Transition<T>>>();
-  // List<Transition<T>> empty_path = new ArrayList<Transition<T>>();
-  // getAllPaths_rec(_initial_state, empty_path, all_paths);
-  // return all_paths;
-  // }
-
-  // private static <T extends Symbol> int match(T symbol, T[] sequence, int
-  // offset) {
-  // int match = 0;
-  // for (T other_symbol : sequence)
-  // if (symbol.equals(other_symbol))
-  // match++;
-  // return match;
-  // }
-
   protected State<T> appendNewSymbol(State<T> state, T symbol) {
     State<T> new_state = new State<T>();
     _all_states.add(new_state);
@@ -173,6 +121,73 @@ public class Automaton<T extends Symbol> implements java.io.Serializable {
 
     // Set last state as final state.
     state.setFinal(true);
+  }
+
+  /**
+   * Return true if the automaton accepts the sequence, and optionally builds a
+   * Stack with the first accepted path.
+   */
+  private static <T extends Symbol> boolean accepts(boolean only_final_state, State<T> state,
+      List<T> sequence, int offset) {
+    if (offset == sequence.size())
+      return (!only_final_state || (state != null && state.isFinal()));
+
+    T symbol = sequence.get(offset);
+    for (Transition<T> t : state) {
+      if (t.getSymbol().equals(symbol)) {
+        if (accepts(only_final_state, t.getState(), sequence, offset + 1))
+          return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Sets a collection of all the accepted paths for a given sequence.
+   */
+  @SuppressWarnings("unchecked")
+  private static <T extends Symbol> void accepts(boolean only_final_state, State<T> state,
+      List<T> sequence, Stack<Transition<T>> accepted,
+      Collection<Collection<Transition<T>>> fully_accepted_paths, int offset) {
+    if (offset == sequence.size()) {
+      if (!only_final_state || (state != null && state.isFinal())) {
+        // if the automaton accepted the whole sequence,
+        // keep the accepted sequence and backtrack
+        fully_accepted_paths.add((Collection<Transition<T>>)accepted.clone());
+        return;
+      }
+    }
+
+    T symbol = sequence.get(offset);
+    for (Transition<T> t : state) {
+      if (t.getSymbol().equals(symbol)) {
+        accepted.push(t);
+        accepts(only_final_state, t.getState(), sequence, accepted, fully_accepted_paths,
+            offset + 1);
+        accepted.pop();
+      }
+    }
+  }
+
+  public boolean accepts(List<T> sequence) {
+    return accepts(true, _initial_state, sequence, 0);
+  }
+
+  public Collection<Collection<Transition<T>>> acceptsAllPaths(List<T> sequence) {
+    Collection<Collection<Transition<T>>> accepted_paths = new ArrayList<Collection<Transition<T>>>();
+    accepts(true, _initial_state, sequence, new Stack<Transition<T>>(), accepted_paths, 0);
+    return accepted_paths;
+  }
+
+  public boolean acceptsPrefix(List<T> prefix) {
+    return accepts(false, _initial_state, prefix, 0);
+  }
+
+  public Collection<Collection<Transition<T>>> acceptsPrefixAllPaths(List<T> sequence) {
+    Collection<Collection<Transition<T>>> accepted_paths = new ArrayList<Collection<Transition<T>>>();
+    accepts(false, _initial_state, sequence, new Stack<Transition<T>>(), accepted_paths, 0);
+    return accepted_paths;
   }
 
   // ////////////////////////////////////////////////////////////////////

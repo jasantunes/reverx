@@ -34,8 +34,7 @@ package automata;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import traces.Message;
-import utils.Utils;
+import traces.ByteChars;
 import dot.DotGraph;
 
 public class RegEx implements Symbol, MessageType, java.io.Serializable {
@@ -87,10 +86,10 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
    * @param over_generalized simplify parameter characterization
    */
   public boolean generalize(boolean over_generalized) {
-    if (!over_generalized)
-      return generalize();
-    else
+    if (over_generalized)
       _pattern = Pattern.compile(".+", FLAGS);
+    else
+      return generalize();
     return true;
   }
 
@@ -148,30 +147,6 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
     return (b >= 32 && b <= 126);
   }
 
-  /**
-   * If byte is any of [\^$.|?*+(){}
-   */
-  public static boolean isSpecialCharacter(byte b) {
-    switch (b) {
-      case '[':
-      case '\\':
-      case '^':
-      case '$':
-      case '.':
-      case '|':
-      case '?':
-      case '*':
-      case '+':
-      case '(':
-      case ')':
-      case '{':
-      case '}':
-        return true;
-    }
-    return false;
-  }
-
-  //
   public static boolean isASCIIAlpha(byte b) {
     return ((b >= 65 && b <= 90) || (b >= 97 && b <= 122));
   }
@@ -180,19 +155,11 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
     return (b >= 48 && b <= 57);
   }
 
-  public static boolean isASCIIPrintable(byte[] data) {
-    for (byte b : data)
-      if (!isASCIIPrintable(b))
-        return false;
-    return true;
-  }
-
   private static String getGeneralizedRegEx(byte[] data) {
-
     boolean alpha = false;
     boolean digit = false;
-    boolean repeat = false;
     HashSet<Byte> other_chars = new HashSet<Byte>(data.length);
+    // System.out.println("> " + new ByteChars(data));
 
     for (byte b : data) {
       if (isASCIIAlpha(b))
@@ -200,23 +167,25 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
       else if (isASCIIDigit(b))
         digit = true;
       else
-        repeat |= !other_chars.add(b);
-      // other_chars.add(b);
+        other_chars.add(b);
     }
-    repeat |= (alpha || digit);
 
-    StringBuffer sb = new StringBuffer(6 + 3 + 5 * other_chars.size() + 2);
+    StringBuffer sb = new StringBuffer(12 + 5 * other_chars.size());
 
-    if (alpha || digit || other_chars.size() > 1)
+    if (alpha || digit || other_chars.size() > 1) {
       sb.append('[');
 
-    if (alpha) {
-      sb.append("A-Za-z");
-      /* uncomment to be optimistic: alpha=alphanumeric */
-      // digit = true;
+      if (alpha) {
+        sb.append("A-Za-z");
+        /* uncomment to generalize more (alpha->alphanumeric) */
+        // digit = true;
+      }
+
+      if (digit)
+        sb.append("0-9");
+
     }
-    if (digit)
-      sb.append("0-9");
+
     for (byte b : other_chars) {
       if (isASCIIPrintable(b))
         sb.append("\\Q" + (char)b + "\\E");
@@ -224,11 +193,11 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
         sb.append(escape(b));
     }
 
-    if (alpha || digit || other_chars.size() > 1)
-      sb.append(']');
+    if (alpha || digit || other_chars.size() > 1) {
+      sb.append("]+");
+    }
 
-    if (repeat == true)
-      sb.append('+');
+    // System.out.println("> " + sb);
 
     return sb.toString();
   }
@@ -239,224 +208,108 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
     return new RegEx(concat);
   }
 
-  private static ArrayList<String> tokenize_reg_ex(String reg_ex) {
-    ArrayList<String> tokens = new ArrayList<String>();
+  // private static ArrayList<String> tokenize_reg_ex(String reg_ex) {
+  // ArrayList<String> tokens = new ArrayList<String>();
+  //
+  // // Tokenize in blocks.
+  // Pattern p = Pattern.compile("(\\[.*?\\]|\\(.*?\\)|.|[A-Z0-9])[\\+\\*]",
+  // FLAGS);
+  // Matcher m = p.matcher(reg_ex);
+  //
+  // int last_end = 0;
+  // while (m.find()) {
+  // int start = m.start();
+  // int end = m.end();
+  //
+  // if (start != last_end) {
+  // String s = reg_ex.substring(last_end, start);
+  // System.out.println(">> " + s);
+  // tokens.add(s);
+  // }
+  //
+  // // Standard regular expression.
+  // String s = reg_ex.substring(start, end);
+  // // System.out.println("> " + s);
+  // tokens.add(s);
+  //
+  // last_end = end;
+  // }
+  //
+  // if (last_end != reg_ex.length()) {
+  // String s = reg_ex.substring(last_end, reg_ex.length());
+  // // System.out.println(">>> " + s);
+  // tokens.add(s);
+  // }
+  //
+  // return tokens;
+  // }
 
-    // Tokenize in blocks.
-    Pattern p = Pattern.compile("(\\[.*?\\]|\\(.*?\\)|.|[A-Z0-9])[\\+\\*]", FLAGS);
-    Matcher m = p.matcher(reg_ex);
-
-    int last_end = 0;
-    while (m.find()) {
-      int start = m.start();
-      int end = m.end();
-
-      if (start != last_end) {
-        String s = reg_ex.substring(last_end, start);
-        System.out.println(">> " + s);
-        tokens.add(s);
-      }
-
-      // Standard regular expression.
-      String s = reg_ex.substring(start, end);
-      // System.out.println("> " + s);
-      tokens.add(s);
-
-      last_end = end;
-    }
-
-    if (last_end != reg_ex.length()) {
-      String s = reg_ex.substring(last_end, reg_ex.length());
-      // System.out.println(">>> " + s);
-      tokens.add(s);
-    }
-
-    return tokens;
-  }
-
-  public ArrayList<String> generateInstances() {
-    ArrayList<String> tokens = new ArrayList<String>();
-
-    // tokenize \E \Q
-    String reg_ex = _pattern.pattern();
-    Pattern p = Pattern.compile("\\\\Q.*?\\\\E", FLAGS);
-    Matcher m = p.matcher(reg_ex);
-
-    int last_end = 0;
-    while (m.find()) {
-      int start = m.start();
-      int end = m.end();
-
-      // standard regular expression
-      if (start != last_end) {
-        String s = reg_ex.substring(last_end, start);
-        ArrayList<String> reg_ex_tokens = tokenize_reg_ex(s);
-        tokens.addAll(reg_ex_tokens);
-      }
-
-      // quoted text
-      String s = reg_ex.substring(start, end);
-      tokens.add(s);
-
-      last_end = end;
-    }
-
-    // standard regular expression
-    if (last_end != reg_ex.length()) {
-      String s = reg_ex.substring(last_end, reg_ex.length());
-      ArrayList<String> reg_ex_tokens = tokenize_reg_ex(s);
-      tokens.addAll(reg_ex_tokens);
-    }
-
-    /*
-     * TODO: Merge serial regular expressions, such as "[A-Z]+ [A-Z]+", which is
-     * transformed into "[A-Z ]+[A-Z]+", and then minimized into "[A-Z ]+".
-     */
-
-    /* Expand regular expressions in instances. */
-    // ArrayList<ArrayList<String>> expanded is in the form of:
-    // array of tokens where each token has all expansions for that token.
-    ArrayList<ArrayList<String>> all_tokens_expansions = new ArrayList<ArrayList<String>>(
-        tokens.size());
-    for (String token : tokens) {
-      ArrayList<String> token_expansion = new ArrayList<String>();
-
-      Matcher match_quote = PATTERN_QUOTE.matcher(token);
-      if (match_quote.find()) {
-        token = match_quote.replaceAll("$1");
-        token_expansion.add(token);
-      } else {
-        token_expansion.addAll(expandRegEx(token));
-      }
-      all_tokens_expansions.add(token_expansion);
-    }
-
-    /* Generate strings from ArrayList<ArrayList<String>> expanded. */
-    ArrayList<StringBuilder> all_instances = new ArrayList<StringBuilder>();
-    all_instances.add(new StringBuilder());
-    for (ArrayList<String> token : all_tokens_expansions) {
-      if (token.size() == 1) {
-        String s = token.get(0);
-        for (StringBuilder sb : all_instances)
-          sb.append(s);
-      } else {
-        ArrayList<StringBuilder> all_instances_tmp = new ArrayList<StringBuilder>(
-            all_instances.size() * token.size());
-        for (StringBuilder sb : all_instances) {
-          for (String s : token)
-            all_instances_tmp.add(new StringBuilder(sb + s));
-        }
-        all_instances = all_instances_tmp;
-      }
-    }
-
-    ArrayList<String> result = new ArrayList<String>(all_instances.size());
-    for (StringBuilder sb : all_instances)
-      result.add(sb.toString());
-
-    return result;
-
-  }
-
-  private static ArrayList<String> expandRegEx(String reg_ex) {
-    ArrayList<String> expanded = new ArrayList<String>();
-    String quantifier = "";
-
-    boolean regex_any_char = false;
-    ArrayList<Character> regex_square_brackets = null;
-
-    // .*
-    if (reg_ex.matches("\\.[+*]{0,1}")) {
-      quantifier = reg_ex.replaceAll("\\.([+*]{0,1})", "$1");
-      regex_any_char = true;
-    }
-
-    // [A-Z]+
-    else if (reg_ex.matches("\\[.*?\\].*")) {
-
-      // Accepted chars.
-      regex_square_brackets = new ArrayList<Character>(128);
-
-      String inside = reg_ex.replaceAll("\\[(.*?)\\].*", "$1");
-
-      char last_c = 0;
-      boolean interval = false;
-      for (char c : inside.toCharArray()) {
-        if (c == '-')
-          interval = true;
-        else {
-          regex_square_brackets.add(c);
-          if (interval) {
-            for (int i = last_c + 1; i < c; i++)
-              regex_square_brackets.add((char)i);
-            interval = false;
-          }
-          last_c = c;
-        }
-      }
-
-      // Get quantifier: +, * or nothing
-      quantifier = reg_ex.replaceAll("\\[.*?\\]([+*]{0,1})", "$1");
-
-    } // [A-Z]+
-
-    // no matching reg ex special
-    else {
-      expanded.add(reg_ex);
-      return expanded;
-    }
-
-    /* Expand into strings */
-    int min = 0, max = 0;
-    if (quantifier.equals("")) {
-      min = 1;
-      max = 1;
-    } else if (quantifier.equals("+")) {
-      min = 1;
-      max = 10;
-    } else if (quantifier.equals("*")) {
-      min = 0;
-      max = 10;
-    }
-
-    // min=0. Add empty string.
-    if (min == 0) {
-      expanded.add("");
-    }
-
-    // min=0 or min=1. Add random string with minimum length.
-    if (min >= 0) {
-      if (regex_any_char) {
-        int i = Utils.random('A', 'Z' + 1);
-        expanded.add(new Character((char)i).toString());
-      } else if (regex_square_brackets != null) {
-        int i = Utils.random(0, regex_square_brackets.size());
-        Character c = regex_square_brackets.get(i);
-        expanded.add(c.toString());
-      }
-
-    }
-
-    if (max > 1) {
-      StringBuilder sb = new StringBuilder(max);
-      if (regex_any_char) {
-        for (int j = 0; j < max; j++) {
-          int i = Utils.random('A', 'Z' + 1);
-          sb.append((char)i);
-        }
-      } else if (regex_square_brackets != null) {
-        for (int j = 0; j < max; j++) {
-          int i = Utils.random(0, regex_square_brackets.size());
-          Character c = regex_square_brackets.get(i);
-          sb.append(c);
-        }
-      }
-      expanded.add(sb.toString());
-    }
-
-    return expanded;
-  }
-
+  /*
+   * public ArrayList<String> generateInstances() { ArrayList<String> tokens =
+   * new ArrayList<String>(); // tokenize \E \Q String reg_ex =
+   * _pattern.pattern(); Pattern p = Pattern.compile("\\\\Q.*?\\\\E", FLAGS);
+   * Matcher m = p.matcher(reg_ex); int last_end = 0; while (m.find()) { int
+   * start = m.start(); int end = m.end(); // standard regular expression if
+   * (start != last_end) { String s = reg_ex.substring(last_end, start);
+   * ArrayList<String> reg_ex_tokens = tokenize_reg_ex(s);
+   * tokens.addAll(reg_ex_tokens); } // quoted text String s =
+   * reg_ex.substring(start, end); tokens.add(s); last_end = end; } // standard
+   * regular expression if (last_end != reg_ex.length()) { String s =
+   * reg_ex.substring(last_end, reg_ex.length()); ArrayList<String>
+   * reg_ex_tokens = tokenize_reg_ex(s); tokens.addAll(reg_ex_tokens); } //
+   * TODO: Merge serial regular expressions, such as "[A-Z]+ [A-Z]+", which is
+   * // transformed into "[A-Z ]+[A-Z]+", and then minimized into "[A-Z ]+". //
+   * Expand regular expressions in instances. // ArrayList<ArrayList<String>>
+   * expanded is in the form of: // array of tokens where each token has all
+   * expansions for that token. ArrayList<ArrayList<String>>
+   * all_tokens_expansions = new ArrayList<ArrayList<String>>( tokens.size());
+   * for (String token : tokens) { ArrayList<String> token_expansion = new
+   * ArrayList<String>(); Matcher match_quote = PATTERN_QUOTE.matcher(token); if
+   * (match_quote.find()) { token = match_quote.replaceAll("$1");
+   * token_expansion.add(token); } else {
+   * token_expansion.addAll(expandRegEx(token)); }
+   * all_tokens_expansions.add(token_expansion); } // Generate strings from
+   * ArrayList<ArrayList<String>> expanded. ArrayList<StringBuilder>
+   * all_instances = new ArrayList<StringBuilder>(); all_instances.add(new
+   * StringBuilder()); for (ArrayList<String> token : all_tokens_expansions) {
+   * if (token.size() == 1) { String s = token.get(0); for (StringBuilder sb :
+   * all_instances) sb.append(s); } else { ArrayList<StringBuilder>
+   * all_instances_tmp = new ArrayList<StringBuilder>( all_instances.size() *
+   * token.size()); for (StringBuilder sb : all_instances) { for (String s :
+   * token) all_instances_tmp.add(new StringBuilder(sb + s)); } all_instances =
+   * all_instances_tmp; } } ArrayList<String> result = new
+   * ArrayList<String>(all_instances.size()); for (StringBuilder sb :
+   * all_instances) result.add(sb.toString()); return result; } private static
+   * ArrayList<String> expandRegEx(String reg_ex) { ArrayList<String> expanded =
+   * new ArrayList<String>(); String quantifier = ""; boolean regex_any_char =
+   * false; ArrayList<Character> regex_square_brackets = null; // .* if
+   * (reg_ex.matches("\\.[+*]{0,1}")) { quantifier =
+   * reg_ex.replaceAll("\\.([+*]{0,1})", "$1"); regex_any_char = true; } //
+   * [A-Z]+ else if (reg_ex.matches("\\[.*?\\].*")) { // Accepted chars.
+   * regex_square_brackets = new ArrayList<Character>(128); String inside =
+   * reg_ex.replaceAll("\\[(.*?)\\].*", "$1"); char last_c = 0; boolean interval
+   * = false; for (char c : inside.toCharArray()) { if (c == '-') interval =
+   * true; else { regex_square_brackets.add(c); if (interval) { for (int i =
+   * last_c + 1; i < c; i++) regex_square_brackets.add((char)i); interval =
+   * false; } last_c = c; } } // Get quantifier: +, * or nothing quantifier =
+   * reg_ex.replaceAll("\\[.*?\\]([+*]{0,1})", "$1"); } // [A-Z]+ // no matching
+   * reg ex special else { expanded.add(reg_ex); return expanded; } // Expand
+   * into strings int min = 0, max = 0; if (quantifier.equals("")) { min = 1;
+   * max = 1; } else if (quantifier.equals("+")) { min = 1; max = 10; } else if
+   * (quantifier.equals("*")) { min = 0; max = 10; } // min=0. Add empty string.
+   * if (min == 0) { expanded.add(""); } // min=0 or min=1. Add random string
+   * with minimum length. if (min >= 0) { if (regex_any_char) { int i =
+   * Utils.random('A', 'Z' + 1); expanded.add(new
+   * Character((char)i).toString()); } else if (regex_square_brackets != null) {
+   * int i = Utils.random(0, regex_square_brackets.size()); Character c =
+   * regex_square_brackets.get(i); expanded.add(c.toString()); } } if (max > 1)
+   * { StringBuilder sb = new StringBuilder(max); if (regex_any_char) { for (int
+   * j = 0; j < max; j++) { int i = Utils.random('A', 'Z' + 1);
+   * sb.append((char)i); } } else if (regex_square_brackets != null) { for (int
+   * j = 0; j < max; j++) { int i = Utils.random(0,
+   * regex_square_brackets.size()); Character c = regex_square_brackets.get(i);
+   * sb.append(c); } } expanded.add(sb.toString()); } return expanded; }
+   */
   public String toString() {
     return _pattern.pattern().replaceAll("\\\\E|\\\\Q", "");
   }
@@ -497,14 +350,6 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
     return tokens;
   }
 
-  public static RegEx getConcatenatedPath(Automaton<RegEx> language, Message message) {
-    List<Transition<RegEx>> path = getPath(language, message);
-    RegEx concat = new RegEx("");
-    for (Transition<RegEx> t : path)
-      concat = RegEx.concat(concat, t.getSymbol());
-    return concat;
-  }
-
   public boolean accepts(CharSequence data) {
     return match(data, 0) == data.length();
   }
@@ -521,38 +366,6 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
 
     // if (m.find() && m.start() == offset) return m.end()-offset;
     return 0;
-  }
-
-  public static List<Transition<RegEx>> getPath(Automaton<RegEx> automaton, CharSequence message) {
-    LinkedList<Transition<RegEx>> path = new LinkedList<Transition<RegEx>>();
-    if (_get_path(message, 0, automaton._initial_state, path))
-      return path;
-    else
-      return null;
-  }
-
-  // TODO a function like this was implemented in accepts() (used in
-  // checkForLanguageViolations().
-  private static boolean _get_path(CharSequence message, int message_offset,
-      State<RegEx> from_state, LinkedList<Transition<RegEx>> output_path) {
-    if (message.length() == message_offset)
-      return true; // found a path (end of recursion)
-
-    for (Transition<RegEx> t : from_state) {
-      RegEx regex = (RegEx)t._symbol;
-      int match = regex.match(message, message_offset);
-
-      // If we match at least one symbol, we keep searching from this path.
-      if (match > 0) {
-        output_path.addLast(t);
-        if (_get_path(message, message_offset + match, t._dest_state, output_path))
-          return true; // found a path (backtrack recursion)
-        else
-          // Undo 'output_path.add(t);'
-          output_path.removeLast();
-      }
-    }
-    return false;
   }
 
   /**
@@ -573,7 +386,7 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
         sb.append((char)b); // append character
       }
 
-      // non-printable (binary)
+      // non-printable (hex)
       else {
         if (quoting) {
           sb.append("\\E"); // unquote ascii character
@@ -590,6 +403,12 @@ public class RegEx implements Symbol, MessageType, java.io.Serializable {
 
   public static String escape(byte b) {
     return "\\x" + String.format("%02X", b);
+  }
+
+  public static void main(String[] args) {
+    RegEx r = new RegEx(new ByteChars("500 /:".getBytes()));
+    System.out.println(r.accepts("500 /:"));
+
   }
 
 }

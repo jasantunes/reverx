@@ -31,36 +31,63 @@
 import java.util.*;
 import traces.*;
 import utils.*;
+import utils.Timer;
 import automata.*;
 
-public class StateMachineMoore implements java.io.Serializable {
+public class StateMachineMoore extends Automaton<MessageType> implements java.io.Serializable {
   protected static final long serialVersionUID = 1L;
-  protected Automaton<RegEx> language;
-  protected Automaton<MessageType> automaton;
-  protected boolean is_textual_protocol;
+  protected Language language;
+
+  public static Timer TIMER;
 
   // EXCEPTION
   public static class UnknownMessageTypeException extends Exception {
-    public UnknownMessageTypeException(String string) {
+    int nth_message = 0; // which message was not accepted (in the traces)
+
+    public UnknownMessageTypeException(String string, int nth_message) {
       super(string);
+      this.nth_message = nth_message;
     }
 
     private static final long serialVersionUID = 1L;
   }
 
-  public StateMachineMoore(Automaton<RegEx> language) {
-    this.language = language;
-    this.automaton = new Automaton<MessageType>();
+  public StateMachineMoore() {
+    language = null;
   }
 
-  public StateMachineMoore(Language language) {
-    this(language.getAutomaton());
-  }
-
-  public StateMachineMoore(Automaton<RegEx> language, Collection<List<Message>> sessions)
+  public StateMachineMoore(Language l, Collection<List<Message>> sessions)
       throws UnknownMessageTypeException {
-    this(language);
-    inferFromTraces(sessions);
+    super();
+    language = l;
+    infer(sessions);
+  }
+
+  protected void infer(Collection<List<Message>> sessions) throws UnknownMessageTypeException {
+    TIMER.mark();
+    System.out.println("[ ] building automaton");
+    int session_id = 0;
+
+    /* Build raw automaton. */
+    for (List<Message> session : sessions) {
+      List<MessageType> inferred = convertSessionToSequenceOfMsgTypes(session);
+      System.out.println("[" + session_id + "] adding " + inferred);
+      super.addSequence(inferred);
+      session_id++;
+    }
+    System.out.println("[T] PTA:\t" + TIMER.getElapsedTimeFromMark());
+    TIMER.mark();
+
+    System.out.println("[ ] merging automaton");
+    // automaton.DRAW("statemachine1-PTA", false);
+    Operations.minimization(this);
+    // automaton.DRAW("statemachine2-PTA-minimized", false);
+
+    /* Reduce automaton. */
+    reduce(this);
+    System.out.println("[T] Merge:\t" + TIMER.getElapsedTimeFromMark());
+
+    this.resetAllStates();
   }
 
   // ////////////////////////////////////////////////////////
@@ -161,7 +188,7 @@ public class StateMachineMoore implements java.io.Serializable {
         System.out.println("\ttrue");
         Operations.determinization(automaton);
         Operations.minimization(automaton);
-        automaton.DRAW("statemachine" + (++n) + "-reduceI", false);
+        // automaton.DRAW("statemachine" + (++n) + "-reduceI", false);
       }
 
       /* Merge all states that share at least one identical transition. */
@@ -170,7 +197,7 @@ public class StateMachineMoore implements java.io.Serializable {
         System.out.println("\ttrue");
         Operations.determinization(automaton);
         Operations.minimization(automaton);
-        automaton.DRAW("statemachine" + (++n) + "-reduceII", false);
+        // automaton.DRAW("statemachine" + (++n) + "-reduceII", false);
       }
 
     } while (changes == true);
@@ -295,39 +322,20 @@ public class StateMachineMoore implements java.io.Serializable {
 
   public List<MessageType> convertSessionToSequenceOfMsgTypes(List<Message> session)
       throws UnknownMessageTypeException {
+    int nth_message = 0;
     List<MessageType> sequence = new ArrayList<MessageType>();
     for (Message m : session) {
-      // Only process input messages.
-      if (m.isInput()) {
-        // RegEx msg_type = RegEx.getInferredMessageType(language, m);
-        List<Transition<RegEx>> path_in_language = RegEx.getPath(language, m);
-        if (path_in_language == null)
-          throw new UnknownMessageTypeException(m.toString());
-        MessageType msg_type = new LanguageMessageType(path_in_language);
-        sequence.add(msg_type);
+      if (m.isInput()) { // Only process input messages.
+        Collection<Transition<RegEx>> path_in_language = language.accepts(m);
+        if (path_in_language != null) {
+          MessageType msg_type = new LanguageMessageType(path_in_language);
+          sequence.add(msg_type);
+        } else
+          throw new UnknownMessageTypeException(m.toString(), nth_message);
       }
+      nth_message++;
     }
     return sequence;
-  }
-
-  public void inferFromTraces(Collection<List<Message>> sessions)
-      throws UnknownMessageTypeException {
-    int session_id = 0;
-
-    /* Build raw automaton. */
-    for (List<Message> session : sessions) {
-      List<MessageType> inferred = convertSessionToSequenceOfMsgTypes(session);
-      System.out.println("[" + session_id + "] adding " + inferred);
-      automaton.addSequence(inferred);
-      session_id++;
-    }
-    automaton.DRAW("statemachine1-PTA", false);
-    Operations.minimization(automaton);
-    automaton.DRAW("statemachine2-PTA-minimized", false);
-
-    /* Reduce automaton. */
-    reduce(automaton);
-    automaton.resetAllStates();
   }
 
   // /////////////////////////////////////////////////////////////////////////////
@@ -357,6 +365,7 @@ public class StateMachineMoore implements java.io.Serializable {
   @SuppressWarnings("unchecked")
   public static void main(String[] args) {
     // main_debug(args); System.exit(0);
+    TIMER = new Timer();
 
     OptionsExtended opt = new OptionsExtended();
     opt.setOption("--stateless=", "-s", "\tIf the server/protocol is stateless.");
@@ -385,8 +394,13 @@ public class StateMachineMoore implements java.io.Serializable {
       String EXPRESSION = (opt.getTotalRemainingArgs() > 0) ? opt.getValueString() : null;
       Automaton.DEBUG = true;
 
+      int MAX = -1;
+      if (opt.getValueBoolean("-m"))
+        MAX = opt.getValueInteger("-m");
+
       /* Load inferred input languages. */
-      Automaton<RegEx> input_language = Automaton.loadFromFile(LANGUAGE);
+      Automaton<RegEx> lang = Automaton.loadFromFile(LANGUAGE);
+      Language input_language = (Language)lang;
       State.NEXT_ID = 0;
 
       /* Load sessions (extracted previously from traces). */
@@ -395,12 +409,12 @@ public class StateMachineMoore implements java.io.Serializable {
       if (opt.getValueBoolean("--txt=")) {
         traces = new TextFile(opt.getValueString("--txt="));
         traces.open();
-        sessions = traces.getSessions(!stateless);
+        sessions = traces.getSessions(!stateless, MAX);
         traces.close();
       } else if (opt.getValueBoolean("--pcap=")) {
         traces = new PcapFile(opt.getValueString("--pcap="), EXPRESSION, null, MSG_DELIMITER);
         traces.open();
-        sessions = traces.getSessions(!stateless);
+        sessions = traces.getSessions(!stateless, MAX);
         traces.close();
       } else if (opt.getValueBoolean("--sessions=")) {
         sessions = (Collection<List<Message>>)utils.Utils.readFromFile(opt
@@ -410,10 +424,31 @@ public class StateMachineMoore implements java.io.Serializable {
       }
 
       /* Infer state machine of the protocol. */
-      StateMachineMoore state_machine = new StateMachineMoore(input_language);
-      state_machine.inferFromTraces(sessions);
-      state_machine.automaton.drawAutomaton(OUTFILE, false);
+      TIMER.restart();
+      StateMachineMoore state_machine = new StateMachineMoore(input_language, sessions);
+      System.out.println("[T] TOTAL TIME:\t" + TIMER.getElapsedTime());
+      state_machine.drawAutomaton(OUTFILE, false);
       Utils.saveToFile(state_machine, OUTFILE);
+
+      /* Checking. */
+      for (List<Message> session : sessions) {
+        try {
+          List<MessageType> inferred = state_machine.convertSessionToSequenceOfMsgTypes(session);
+          if (!state_machine.acceptsPrefix(inferred)) {
+            System.err.println("X " + inferred);
+            System.err.println("ERROR: !state_machine.accepts(inferred)");
+            utils.Utils.sleep(10000);
+            System.exit(1);
+          } else
+            System.out.print(".");
+        } catch (UnknownMessageTypeException e1) {
+          System.err.println("X " + e1 + session.get(e1.nth_message));
+          System.err.println("ERROR: UnknownMessageTypeException!");
+          utils.Utils.sleep(10000);
+          e1.printStackTrace();
+          System.exit(1);
+        }
+      }
 
     } catch (OptionsException e_options) {
       /* print usage and quit */

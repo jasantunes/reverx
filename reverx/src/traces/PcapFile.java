@@ -49,6 +49,8 @@ import org.jnetpcap.protocol.tcpip.Udp;
 import utils.Convert;
 
 public class PcapFile implements TracesInterface {
+  public static final String DELIMITER_CRLF = "\r\n"; // "\\\\r\\\\n";
+
   protected Pcap pcap;
   protected String filename;
   protected String filter; // to filter messages
@@ -340,26 +342,41 @@ public class PcapFile implements TracesInterface {
    * getSessions(stateful_protocol,-1).
    */
   public Collection<List<Message>> getSessions(boolean is_stateful_protocol, int sample_size) {
+
+    /*
+     * In a statefull protocol, sessions are determined by the connection
+     * information written to last_connection by the call getNextPacket().
+     */
     if (is_stateful_protocol) {
-      // Use LinkedHashMap to maintain the same order.
+      // Using LinkedHashMap to maintain the same order.
       LinkedHashMap<Connection, List<Message>> sessions = new LinkedHashMap<Connection, List<Message>>();
       Message m = null;
-      while ((m = getNextPacket()) != null && sample_size-- != 0) {
+      while ((m = getNextPacket()) != null && sample_size != 0) {
+
+        // if (m.toString().startsWith("230-"))
+        // System.out.println("HERE");
+
         List<Message> session = sessions.get(last_connection);
         if (session == null) {
           session = new ArrayList<Message>();
           sessions.put(last_connection, session);
         }
         session.add(m);
+        sample_size--;
       }
       return sessions.values();
-    } else {
-      // eg, DNS. Split sessions at each single pair of (req,resp).
+    }
+
+    /*
+     * In stateless protocol, such as DNS, each request/response is considered a
+     * single session.
+     */
+    else {
       ArrayList<List<Message>> sessions = new ArrayList<List<Message>>();
       List<Message> session = new ArrayList<Message>();
       Message m = null;
       boolean expecting_response = false;
-      while (sample_size-- != 0 && (m = getNextPacket()) != null) {
+      while ((m = getNextPacket()) != null && sample_size != 0) {
 
         // Got a request but we were looking for a response, it's a new session.
         if (m.isInput() && expecting_response) {
@@ -372,12 +389,19 @@ public class PcapFile implements TracesInterface {
           expecting_response = true;
 
         session.add(m);
+        sample_size--;
       }
+
+      // no more messages to process: add current session
       if (!session.isEmpty())
         sessions.add(session);
       return sessions;
     }
   }
+
+  // //////////////////////////////////////////////////////////
+  // //////////////////////////////////////////////////////////
+  // //////////////////////////////////////////////////////////
 
   public static int getIpInt(String address) {
     String host = address.substring(0);
@@ -400,6 +424,62 @@ public class PcapFile implements TracesInterface {
   public static String getPortString(String address) {
     int separator = address.indexOf(':');
     return address.substring(separator + 1);
+  }
+
+  // //////////////////////////////////////////////////////////
+  // //////////////////////////////////////////////////////////
+  // //////////////////////////////////////////////////////////
+
+  /**
+   * STATISTICS
+   */
+  public static void printStatistics(Collection<List<Message>> sessions) {
+    int n = 0;
+    double avg = 0, avg_in = 0, avg_out = 0;
+    double stddev = 0, stddev_in = 0, stddev_out = 0;
+    long sum_square = 0, sum_square_in = 0, sum_square_out = 0;
+    long sum = 0, sum_in = 0, sum_out = 0;
+
+    System.out.println("[S] sessions:\t" + sessions.size());
+    for (List<Message> session : sessions) {
+      n++;
+      int x_in = 0, x_out = 0;
+      for (Message m : session) {
+        if (m.isInput())
+          x_in++;
+        else
+          x_out++;
+      }
+      int x = x_in + x_out;
+
+      System.out.println("[S] session:\t" + x + "\t" + x_in + "\t" + x_out);
+
+      // total (input + output)
+      avg = (avg * (n - 1) + x) / n;
+      sum_square += x * x; // Sum x_i^2
+      sum += x; // Sum x_i
+      stddev = (n * avg * avg + sum_square - 2 * avg * sum) / (n - 1);
+      stddev = Math.sqrt(stddev);
+
+      // input
+      avg_in = (avg_in * (n - 1) + x_in) / n;
+      sum_square_in += x_in * x_in; // Sum x_i^2
+      sum_in += x_in; // Sum x_i
+      stddev_in = (n * avg_in * avg_in + sum_square_in - 2 * avg_in * sum_in) / (n - 1);
+      stddev_in = Math.sqrt(stddev_in);
+
+      // output
+      avg_out = (avg_out * (n - 1) + x_out) / n;
+      sum_square_out += x_out * x_out; // Sum x_i^2
+      sum_out += x_out; // Sum x_i
+      stddev_out = (n * avg_out * avg_out + sum_square_out - 2 * avg_out * sum_out) / (n - 1);
+      stddev_out = Math.sqrt(stddev_out);
+    }
+    System.out.println("[S] total msgs:\t" + sum + "\t" + sum_in + "\t" + sum_out);
+    System.out.println("[S] avg msgs/sessions:\t" + avg + "\t" + avg_in + "\t" + avg_out);
+    System.out.println("[S] stddev msgs/sessions:\t" + stddev + "\t" + stddev_in + "\t"
+        + stddev_out);
+
   }
 
 }

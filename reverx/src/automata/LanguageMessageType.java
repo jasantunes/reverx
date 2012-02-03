@@ -31,11 +31,10 @@
 
 package automata;
 
+import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import traces.ByteChars;
 
 public class LanguageMessageType implements MessageType, java.io.Serializable {
   protected static final long serialVersionUID = Symbol.serialVersionUID;
@@ -46,7 +45,7 @@ public class LanguageMessageType implements MessageType, java.io.Serializable {
   public static final Pattern PATTERN_TEXTUAL_FIELD = Pattern.compile("\\w+");
 
   // Path of transitions in language automaton that accept a type of message.
-  private List<Transition<RegEx>> _path_in_language;
+  private Collection<Transition<RegEx>> _path_in_language;
 
   public static void setTextualProtocol(boolean is_textual) {
     if (is_textual)
@@ -55,7 +54,7 @@ public class LanguageMessageType implements MessageType, java.io.Serializable {
       LanguageMessageType.PATTERN_FIELD = null;
   }
 
-  public LanguageMessageType(List<Transition<RegEx>> message_type) {
+  public LanguageMessageType(Collection<Transition<RegEx>> message_type) {
     _path_in_language = message_type;
 
     // get string from regexs
@@ -65,7 +64,7 @@ public class LanguageMessageType implements MessageType, java.io.Serializable {
     // _message_type_tostring = sb.toString();
   }
 
-  public List<Transition<RegEx>> getPathInLanguage() {
+  public Collection<Transition<RegEx>> getPathInLanguage() {
     return _path_in_language;
   }
 
@@ -128,17 +127,17 @@ public class LanguageMessageType implements MessageType, java.io.Serializable {
     return sanitize(sb.toString());
   }
 
-  public boolean accepts(ByteChars message) {
-    int offset = 0;
-    int match = 0;
-    Iterator<Transition<RegEx>> iter = _path_in_language.iterator();
-    while (iter.hasNext()) {
-      match = iter.next()._symbol.match(message, offset);
-      if (match == 0)
-        return false;
-      offset += match;
-    }
-    return (iter.hasNext() == false);
-  }
+  // public boolean accepts(ByteChars message) {
+  // int offset = 0;
+  // int match = 0;
+  // Iterator<Transition<RegEx>> iter = _path_in_language.iterator();
+  // while (iter.hasNext()) {
+  // match = iter.next()._symbol.match(message, offset);
+  // if (match == 0)
+  // return false;
+  // offset += match;
+  // }
+  // return (iter.hasNext() == false);
+  // }
 
 }

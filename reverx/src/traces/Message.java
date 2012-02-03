@@ -33,11 +33,11 @@ package traces;
 
 public class Message extends ByteChars implements java.io.Serializable {
   private static final long serialVersionUID = 1L;
-  private boolean is_request;
+  private boolean input;
 
-  public Message(byte[] data, boolean is_request) {
+  public Message(byte[] data, boolean is_input) {
     super(data);
-    this.is_request = is_request;
+    input = is_input;
   }
 
   public void setByteArray(byte[] data) {
@@ -47,7 +47,7 @@ public class Message extends ByteChars implements java.io.Serializable {
   }
 
   public boolean isInput() {
-    return is_request;
+    return input;
   }
 
 }

@@ -31,26 +31,18 @@
 import java.util.*;
 import traces.*;
 import utils.*;
+import utils.Timer;
 import automata.*;
 
 public class StateMachineMealy extends StateMachineMoore implements java.io.Serializable {
   protected static final long serialVersionUID = StateMachineMoore.serialVersionUID;
-  protected Automaton<RegEx> output_language;
+  protected Language output_language;
 
-  public StateMachineMealy(Automaton<RegEx> input_language, Automaton<RegEx> output_language) {
-    super(input_language);
-    this.output_language = output_language;
-  }
-
-  public StateMachineMealy(Language input_language, Language output_language) {
-    super(input_language);
-    this.output_language = output_language.getAutomaton();
-  }
-
-  public StateMachineMealy(Automaton<RegEx> input_language, Automaton<RegEx> output_language,
-      Collection<List<Message>> sessions) throws UnknownMessageTypeException {
-    this(input_language, output_language);
-    inferFromTraces(sessions);
+  public StateMachineMealy(Language l_input, Language l_output, Collection<List<Message>> sessions)
+      throws UnknownMessageTypeException {
+    language = l_input;
+    output_language = l_output;
+    infer(sessions);
   }
 
   @Override
@@ -59,13 +51,13 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
     List<MessageType> sequence = new ArrayList<MessageType>();
     List<LanguageMessageType> input = new ArrayList<LanguageMessageType>();
     List<LanguageMessageType> output = new ArrayList<LanguageMessageType>();
-
+    int nth_message = 0;
     /* Process each message of a session. */
     boolean look_for_output = false;
     for (Message m : session) {
 
       if (m.isInput()) {
-        System.out.println("> " + m.toString());
+        // System.out.println("> " + m.toString());
         if (look_for_output) {
           // We have a complete <input,output> symbol.
           sequence.add(new IOLanguageMessageType(input, output));
@@ -73,24 +65,28 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
           output = new ArrayList<LanguageMessageType>();
           look_for_output = false;
         }
-        List<Transition<RegEx>> path_in_language = RegEx.getPath(this.language, m);
-        if (path_in_language == null)
-          throw new UnknownMessageTypeException("Unknown message: " + m.toString());
-        LanguageMessageType msg_type = new LanguageMessageType(path_in_language);
-        input.add(msg_type);
+
+        Collection<Transition<RegEx>> path_in_language = language.accepts(m);
+        if (path_in_language != null) {
+          LanguageMessageType msg_type = new LanguageMessageType(path_in_language);
+          input.add(msg_type);
+        } else
+          throw new UnknownMessageTypeException(m.toString(), nth_message);
       }
 
       // Output message.
       else {
-        System.out.println("< " + m.toString());
+        // System.out.println("< " + m.toString());
         look_for_output = true;
-        List<Transition<RegEx>> path_in_language = RegEx.getPath(this.output_language, m);
-        if (path_in_language == null)
-          throw new UnknownMessageTypeException("Unknown message: " + m.toString());
-        LanguageMessageType msg_type = new LanguageMessageType(path_in_language);
-        output.add(msg_type);
-
+        Collection<Transition<RegEx>> path_in_language = output_language.accepts(m);
+        if (path_in_language != null) {
+          LanguageMessageType msg_type = new LanguageMessageType(path_in_language);
+          output.add(msg_type);
+        } else
+          throw new UnknownMessageTypeException(m.toString(), nth_message);
       }
+
+      nth_message++;
     }
 
     /* Add last <input,output> symbol. */
@@ -103,7 +99,7 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
   // /////////////////////////////////////////////////////////////////////////////
   public static void printUsage(OptionsExtended options) {
     System.out
-        .println("Usage: java StateMachineMealy [OPTIONS...] LANG1 LANG2 IP:PORT STATEMACHINE [\"expr\"]");
+        .println("Usage: java StateMachineMealy [OPTIONS...] LANG1 LANG2 STATEMACHINE IP:PORT [\"expr\"]");
     System.out.println();
     System.out.println("Creates an automaton that represents the protocol state machine "
         + "from messages taken from traces (text or pcap file) that are recognized by "
@@ -128,6 +124,7 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
 
   @SuppressWarnings("unchecked")
   public static void main(String[] args) {
+    TIMER = new Timer();
 
     /* Global option for printing textual protocols / binary. */
     // LanguageMessageType.setTextualProtocol(true);
@@ -136,7 +133,7 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
     OptionsExtended opt = new OptionsExtended();
     opt.setOption("--txt=", "-t", "FILE\ttext file with a packet payload in each line");
     opt.setOption("--pcap=", "-p", "FILE\tpacket capture file in tcpdump format");
-    // opt.setOption("--sessions=", null, "FILE\tSessions object file");
+    opt.setOption("--sessions=", null, "FILE\tSessions object file");
     opt.setOption("--max=", "-m", "NUMBER\tmaximum number of messages to process");
     opt.setOption("--delim=", "-d", "message delimiter (eg, \"\\r\\n\")");
     opt.setOption("--stateless=", "-s", "\tif the protocol is stateless");
@@ -156,15 +153,17 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
       }
       String LANG1 = opt.getValueString();
       String LANG2 = opt.getValueString();
-      String SERVER_ADDR = opt.getValueString();
       String OUTFILE = opt.getValueString();
-      // Optional expression
+      // Optional
+      String SERVER_ADDR = (opt.getTotalRemainingArgs() > 0) ? opt.getValueString() : null;
       String EXPRESSION = (opt.getTotalRemainingArgs() > 0) ? opt.getValueString() : null;
       Automaton.DEBUG = true;
 
       /* Load inferred input languages. */
-      Automaton<RegEx> input_language = Automaton.loadFromFile(LANG1);
-      Automaton<RegEx> output_language = Automaton.loadFromFile(LANG2);
+      Automaton<RegEx> automaton = Automaton.loadFromFile(LANG1);
+      Language input_language = (Language)automaton;
+      automaton = Automaton.loadFromFile(LANG2);
+      Language output_language = (Language)automaton;
 
       /* Load sessions (extracted previously from traces). */
       Collection<List<Message>> sessions = null;
@@ -198,9 +197,11 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
       }
 
       /* Infer state machine of the protocol. */
-      StateMachineMealy state_machine = new StateMachineMealy(input_language, output_language);
-      state_machine.inferFromTraces(sessions);
-      state_machine.automaton.drawAutomaton(OUTFILE, false);
+      TIMER.restart();
+      StateMachineMealy state_machine = new StateMachineMealy(input_language, output_language,
+          sessions);
+      System.out.println("[T] TOTAL TIME:\t" + TIMER.getElapsedTime());
+      state_machine.drawAutomaton(OUTFILE, false);
       Utils.saveToFile(state_machine, OUTFILE);
 
     } catch (OptionsException e_options) {

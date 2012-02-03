@@ -31,70 +31,82 @@
 import java.util.*;
 import traces.*;
 import utils.*;
+import utils.Timer;
 import automata.*;
 
-public class Language {
-  protected Automaton<RegEx> automaton;
+public class Language extends Automaton<RegEx> implements java.io.Serializable {
+  protected static final long serialVersionUID = 1L;
+  // protected Automaton<RegEx> automaton;
+
+  public static Timer TIMER;
 
   public Language() {
-    automaton = new Automaton<RegEx>();
+    super();
   }
 
-  public Automaton<RegEx> getAutomaton() {
-    return automaton;
-  }
+  // public Language(Automaton<RegEx> automaton) {
+  // this._initial_state = automaton.getInitialState();
+  // this._all_states = automaton.getAllStates();
+  // }
 
-  public static Automaton<RegEx> inferLanguage(boolean direction,
-      Collection<List<Message>> messages, float t1, int t2) {
-    Language l = new Language();
-    l.inferFromTraces(direction, messages, t1, t2);
-    return l.automaton;
-  }
+  // public Automaton<RegEx> getAutomaton() {
+  // return automaton;
+  // }
 
-  public void inferFromTraces(boolean is_input, Collection<List<Message>> messages, float T1, int T2) {
+  // public static Automaton<RegEx> inferLanguage(boolean direction,
+  // Collection<List<Message>> messages, float t1, int t2) {
+  // Language l = new Language();
+  // l.inferFromTraces(direction, messages, t1, t2);
+  // return l.automaton;
+  // }
+
+  public Language(boolean is_input, Collection<List<Message>> messages, float T1, int T2) {
+    TIMER.mark();
     System.out.println("[ ] building automaton");
     // State.NEXT_ID = 0;
 
     /* Extract individual messages and add them to the automaton. */
     for (List<Message> session : messages) {
-      System.out.println("> _____");
+      // System.out.println("> _____");
       for (Message message : session) {
         if (message.isInput() == is_input) {
-          System.out.println("> " + message);
-          addSequence(automaton, message);
+          // System.out.println("> " + message);
+          this.addSequence(message);
         }
       }
     }
 
     int n = 0;
     // automaton.DRAW("lang" + (++n) + "-PTA", false);
-    Operations.minimization(automaton);
-    // automaton.DRAW("lang" + (++n) + "-PTA-minimized", false);
+
+    System.out.println("[T] PTA:\t" + TIMER.getElapsedTimeFromMark());
+    TIMER.mark();
 
     /* Generalize and merge similar transitions. */
     System.out.println("[ ] generalizing automaton");
-    int old_total = automaton.getAllStates().size();
-    if (generalize(automaton, T2)) {
-      Operations.determinization(automaton);
-      Operations.minimization(automaton);
+    Operations.minimization(this);
+    int old_total = _all_states.size();
+    if (generalize(this, T2)) {
+      Operations.determinization(this);
+      Operations.minimization(this);
       // automaton.DRAW("lang" + (++n) + "-generalized-T2", false);
     }
-    while (generalize(automaton, T1)) {
-      Operations.determinization(automaton);
-      Operations.minimization(automaton);
+    while (generalize(this, T1)) {
+      Operations.determinization(this);
+      Operations.minimization(this);
       // automaton.DRAW("lang" + (++n) + "-generalized-T1", false);
     }
 
-    int new_total = automaton.getAllStates().size();
+    int new_total = _all_states.size();
     System.out.println("[ ] \tgeneralized: " + old_total + " >  " + new_total + " states ("
         + (int)((1 - (new_total / ((float)old_total))) * 100) + "% smaler)");
 
     /* Concatenate linear transitions and states. */
     if (RegEx.hasTextBasedSupport())
-      concatUniqueLinearStates(automaton);
-    automaton.resetAllStates();
+      concatUniqueLinearStates(this);
+    this.resetAllStates();
     // automaton.DRAW("lang" + (++n) + "-generalized", false);
-
+    System.out.println("[T] Generalization:\t" + TIMER.getElapsedTimeFromMark());
   }
 
   /**
@@ -104,81 +116,8 @@ public class Language {
    * "officials of other agencies..." would be appended to: of -> ficials ->
    * ..., splitting of-ficials
    */
-  @Deprecated
-  public static void addSequence(Automaton<RegEx> automaton, String message) {
-    State<RegEx> state = automaton.getInitialState();
-    int message_offset = 0;
-
-    // Get common prefix.
-    while (state.isFinal() == false) {
-      boolean found = false;
-      for (Transition<RegEx> t : state) {
-        int match = t.getSymbol().match(message, message_offset);
-        if (match > 0) {
-          t.setFreq(t.getFreq() + 1);
-          message_offset += match;
-          state = t.getState();
-          found = true;
-          break;
-        }
-      }
-      if (!found)
-        break;
-    }
-
-    // Add a new path of symbols to remaining sequence.
-    List<RegEx> sequence_of_symbols = RegEx.tokenize(message, message_offset);
-    for (RegEx symbol : sequence_of_symbols) {
-      State<RegEx> new_state = new State<RegEx>();
-      automaton.getAllStates().add(new_state);
-      Transition<RegEx> new_t = new Transition<RegEx>(symbol, new_state);
-      new_t.setFreq(1);
-      state.getTransitions().add(new_t);
-      state = new_state;
-    }
-    state.setFinal(true);
-  }
-
-  /**
-   * Creates and adds a new sequence by tokenizing the message.
-   */
-  public static void addSequence(Automaton<RegEx> automaton, Message message) {
-    State<RegEx> state = automaton.getInitialState();
-    List<RegEx> sequence_of_symbols = RegEx.tokenize(message, 0);
-    int offset = 0;
-
-    // Get common prefix.
-    while (state.isFinal() == false && offset < sequence_of_symbols.size()) {
-      RegEx symbol = sequence_of_symbols.get(offset);
-      boolean found = false;
-
-      for (Transition<RegEx> t : state) {
-        if (t.getSymbol().equals(symbol)) {
-          t.setFreq(t.getFreq() + 1);
-          state = t.getState();
-          offset++;
-          found = true;
-          break; // go to next state
-        }
-      }
-
-      // break if not found
-      if (!found)
-        break;
-    }
-
-    // Add remaining sequence of symbols to new path.
-    while (offset < sequence_of_symbols.size()) {
-      RegEx symbol = sequence_of_symbols.get(offset);
-      State<RegEx> new_state = new State<RegEx>();
-      automaton.getAllStates().add(new_state);
-      Transition<RegEx> new_t = new Transition<RegEx>(symbol, new_state);
-      new_t.setFreq(1);
-      state.getTransitions().add(new_t);
-      state = new_state;
-      offset++;
-    }
-    state.setFinal(true);
+  public void addSequence(Message message) {
+    super.addSequence(RegEx.tokenize(message, 0));
   }
 
   private static int _get_paths_to_state(Collection<State<RegEx>> all_states,
@@ -347,6 +286,7 @@ public class Language {
   @SuppressWarnings("unchecked")
   public static void main(String[] args) {
     // main_debug(args); System.exit(0);
+    TIMER = new Timer();
 
     OptionsExtended opt = new OptionsExtended();
     opt.setOption("--txt=", "-t", "FILE\ttext file with a packet payload in each line");
@@ -359,6 +299,7 @@ public class Language {
     opt.setOption("--ip=", "--ip", "\t\tIP payload instead of TCP/UDP");
     opt.setOption("--snaplen=", null,
         "BYTES\tmaximum bytes to extract from payload (useful to extract headers)");
+    opt.setOption("--output=", null, "\t\tinfer output messages (from sessions only)");
 
     Automaton.DEBUG = true;
 
@@ -422,34 +363,40 @@ public class Language {
         throw new OptionsException(OptionsException.Types.MISSING_PARAMETER, "Missing traces file.");
       }
 
-      /* DEBUG: Reduce number of sessions/messages. */
-      // int MAX_SESSIONS = 20;
-      // Collection<List<Message>> temp = new
-      // ArrayList<List<Message>>(MAX_SESSIONS);
-      // int i = 0;
-      // for (List<Message> session : sessions)
-      // if (i++ >= MAX_SESSIONS)
-      // break;
-      // else
-      // temp.add(session);
-      // sessions = temp;
-
-      System.out.println("# raw sessions:\t" + sessions.size());
       State.NEXT_ID = 0;
       Automaton.DEBUG_FILENAME = LANGUAGE;
-      Language language = new Language();
-      language.inferFromTraces(true, sessions, T1, T2);
-      language.automaton.resetAllStates();
-      language.automaton.saveToFile(LANGUAGE);
-      language.automaton.drawAutomaton(LANGUAGE, false);
+      TIMER.restart();
+      Language language = new Language(!opt.getValueBoolean("--output="), sessions, T1, T2);
+      System.out.println("[T] TOTAL TIME:\t" + TIMER.getElapsedTime());
+      language.resetAllStates();
+      language.saveToFile(LANGUAGE);
+      language.drawAutomaton(LANGUAGE, false);
+
+      /* Check */
+      boolean input = !opt.getValueBoolean("--output=");
+      for (List<Message> session : sessions) {
+        for (Message m : session) {
+          if (m.toString().startsWith("PORT"))
+            System.out.println("HERE!");
+          if (m.isInput() == input && language.accepts(m) == null) {
+            System.err.println("X " + m);
+            Utils.sleep(10000);
+            System.exit(0);
+          }
+        }
+      }
+
+      /* STATISTICS */
+      PcapFile.printStatistics(sessions);
 
       System.out.println("# Printing all paths");
-      ArrayList<ArrayList<RegEx>> all_paths = language.automaton.getListofPaths();
+      ArrayList<ArrayList<RegEx>> all_paths = language.getListofPaths();
       for (ArrayList<RegEx> path : all_paths) {
         for (RegEx symbol : path)
           System.out.print(symbol);
         System.out.println();
       }
+      System.out.println("[S] inferred msgs formats:\t" + all_paths.size());
 
       System.out.println("[ ] DONE!");
 
@@ -462,4 +409,75 @@ public class Language {
       e.printStackTrace();
     }
   }
+
+  /**
+   * @deprecated In Language class, use accepts(CharSequence message) instead.
+   */
+  @Override
+  @Deprecated
+  public boolean accepts(List<RegEx> sequence) {
+    return false;
+  }
+
+  /**
+   * @deprecated In Language class, use accepts(CharSequence message) instead.
+   */
+  @Override
+  @Deprecated
+  public Collection<Collection<Transition<RegEx>>> acceptsAllPaths(List<RegEx> sequence) {
+    return null;
+  }
+
+  /**
+   * @deprecated In Language class, use accepts(CharSequence message) instead.
+   */
+  @Override
+  @Deprecated
+  public boolean acceptsPrefix(List<RegEx> prefix) {
+    return false;
+  }
+
+  /**
+   * @deprecated In Language class, use acceptsAllPaths(CharSequence message)
+   *             instead.
+   */
+  @Override
+  @Deprecated
+  public Collection<Collection<Transition<RegEx>>> acceptsPrefixAllPaths(List<RegEx> sequence) {
+    return null;
+  }
+
+  /**
+   * Returns a path accepting the message.
+   */
+  public Collection<Transition<RegEx>> accepts(CharSequence message) {
+    Stack<Transition<RegEx>> curr_path = new Stack<Transition<RegEx>>();
+    if (accepts(_initial_state, message, curr_path, 0))
+      return curr_path;
+    else
+      return null;
+  }
+
+  /**
+   * Overrides automaton.accepts()
+   */
+  public static boolean accepts(State<RegEx> state, CharSequence message,
+      Stack<Transition<RegEx>> curr_path, int offset) {
+    if (offset == message.length())
+      return (state != null && state.isFinal());
+
+    for (Transition<RegEx> t : state) {
+      int match = t.getSymbol().match(message, offset);
+      if (match > 0) {
+        if (curr_path != null)
+          curr_path.push(t);
+        if (accepts(t.getState(), message, curr_path, offset + match))
+          return true;
+        if (curr_path != null)
+          curr_path.pop();
+      }
+    }
+    return false;
+  }
+
 }
