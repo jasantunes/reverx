@@ -38,6 +38,15 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
   protected static final long serialVersionUID = 1L;
   protected Language language;
 
+  protected static int STATS_TIMER_PTA;
+  protected static int STATS_TIMER_GENERALIZE;
+  protected static int STATS_TIMER_MINIMIZATION;
+  protected static int STATS_STATES0;
+  protected static int STATS_STATES1;
+  protected static int STATS_PATHS0;
+  protected static int STATS_PATHS1;
+  protected static int STATS_MESSAGES = 0;
+
   public static Timer TIMER;
 
   // EXCEPTION
@@ -64,10 +73,10 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
   }
 
   protected void infer(Collection<List<Message>> sessions) throws UnknownMessageTypeException {
-    TIMER.mark();
     System.out.println("[ ] building automaton");
     int session_id = 0;
 
+    TIMER.restart();
     /* Build raw automaton. */
     for (List<Message> session : sessions) {
       List<MessageType> inferred = convertSessionToSequenceOfMsgTypes(session);
@@ -75,51 +84,58 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
       super.addSequence(inferred);
       session_id++;
     }
-    System.out.println("[T] PTA:\t" + TIMER.getElapsedTimeFromMark());
-    TIMER.mark();
+
+    STATS_TIMER_PTA = TIMER.getElapsedTime();
+    System.out.println("[T] PTA:\t" + STATS_TIMER_PTA);
+
+    /* STATS */
+    STATS_STATES0 = _all_states.size();
+    // STATS_PATHS0 = this.getListofPaths().size();
+    TIMER.restart();
+    /* STATS */
 
     System.out.println("[ ] merging automaton");
     // automaton.DRAW("statemachine1-PTA", false);
+    TIMER.mark();
     Operations.minimization(this);
+    STATS_TIMER_MINIMIZATION = TIMER.getElapsedTimeFromMark();
     // automaton.DRAW("statemachine2-PTA-minimized", false);
 
-    /* Reduce automaton. */
-    reduce(this);
+    /* Generalize automaton. */
+    generalize(this);
+    this.resetAllStates();
+    STATS_TIMER_GENERALIZE = TIMER.getElapsedTime() - STATS_TIMER_MINIMIZATION;
     System.out.println("[T] Merge:\t" + TIMER.getElapsedTimeFromMark());
 
-    this.resetAllStates();
+    /* STATS */
+    STATS_STATES1 = _all_states.size();
+    // STATS_PATHS1 = this.getListofPaths().size();
+    TIMER.restart();
+    /* STATS */
+
   }
 
   // ////////////////////////////////////////////////////////
 
   /**
-   * Returns the number of transitions in common iff there is a cycle between s0
-   * and s1 or they are not causal dependent (no partial cycle).
+   * Returns the number of message types in common.
    */
-  private static int _have_in_common(State<MessageType> s0, State<MessageType> s1) {
-    {
-      // This also checks if either (a) there is a cycle between both states
-      // (both true) or (b) there is no partial cycle (both false)
-      boolean s0_to_s1 = !s0.getAcceptedTransitions(s1).isEmpty();
-      boolean s1_to_s2 = !s1.getAcceptedTransitions(s0).isEmpty();
-      if (s0_to_s1 != s1_to_s2)
-        return 0;
-    }
+  private static int _msg_types_have_in_common(State<MessageType> s0, State<MessageType> s1) {
 
-    HashSet<Transition<MessageType>> common_transitions = new HashSet<Transition<MessageType>>(
-        s0.getTransitions());
-    common_transitions.retainAll(s1.getTransitions());
-    // HashSet<MessageType> common_transitions = new
-    // HashSet<MessageType>(s0.getTransitions().size());
-    // HashSet<MessageType> symbols1 = new
-    // HashSet<MessageType>(s1.getTransitions().size());
-    // for (Transition<MessageType> t : s0.getTransitions())
-    // common_transitions.add(t.getSymbol());
-    // for (Transition<MessageType> t : s1.getTransitions())
-    // symbols1.add(t.getSymbol());
-    // common_transitions.retainAll(symbols1);
+    // Message types defined in s0
+    Set<MessageType> transitions_in_s0 = new HashSet<MessageType>(s0.getTransitions().size());
+    for (Transition<MessageType> t : s0.getTransitions())
+      transitions_in_s0.add(t.getSymbol());
 
-    return common_transitions.size();
+    // Message types defined in s1
+    Set<MessageType> transitions_in_s1 = new HashSet<MessageType>(s1.getTransitions().size());
+    for (Transition<MessageType> t : s1.getTransitions())
+      transitions_in_s1.add(t.getSymbol());
+
+    // intersection
+    transitions_in_s0.retainAll(transitions_in_s1);
+
+    return transitions_in_s0.size();
   }
 
   private static HashSet<State<MessageType>> getPartition(
@@ -168,7 +184,7 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
     return result;
   }
 
-  public static void reduce(Automaton<MessageType> automaton) {
+  public static void generalize(Automaton<MessageType> automaton) {
     ArrayList<State<MessageType>> _all_states = automaton.getAllStates();
     int n = 2;
 
@@ -176,31 +192,38 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
     for (State<MessageType> s : _all_states)
       s.setFinal(false);
 
-    boolean changes = false;
+    boolean dirty = true;
     int i = 0;
-    do {
-      changes = false;
+    while (dirty == true) {
+      dirty = false;
       System.out.println("[ ] Reduce x " + (++i) + " times");
 
       /* Merge all dest_state that come from the same symbol. */
-      if (reduceI(automaton)) {
-        changes = true;
+      if (generalizeI(automaton)) {
+        dirty = true;
         System.out.println("\ttrue");
+        TIMER.mark();
         Operations.determinization(automaton);
         Operations.minimization(automaton);
+        STATS_TIMER_MINIMIZATION += TIMER.getElapsedTimeFromMark();
         // automaton.DRAW("statemachine" + (++n) + "-reduceI", false);
       }
 
-      /* Merge all states that share at least one identical transition. */
-      while (reduceII(automaton)) {
-        changes = true;
+      /*
+       * Merge all states that share at least one identical transition and have
+       * no causal relation.
+       */
+      while (generalizeII(automaton)) {
+        dirty = true;
         System.out.println("\ttrue");
+        TIMER.mark();
         Operations.determinization(automaton);
         Operations.minimization(automaton);
+        STATS_TIMER_MINIMIZATION += TIMER.getElapsedTimeFromMark();
         // automaton.DRAW("statemachine" + (++n) + "-reduceII", false);
       }
 
-    } while (changes == true);
+    }
 
     /* Find final states. */
     for (State<MessageType> s : _all_states)
@@ -210,14 +233,11 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
   }
 
   /**
-   * Merges cyclic states that are deemed similar (fuzzy). Their similarity is
+   * Merges cyclic states that are considered similar. Their similarity is
    * related to the number of minimal changes that two states have to suffer to
    * be identical.
-   * 
-   * @return True if there has been some merges (may be required to run again)
-   *         TODO: add check for states without causal relation
    */
-  private static boolean reduceII(Automaton<MessageType> automaton) {
+  private static boolean generalizeII(Automaton<MessageType> automaton) {
     System.out.println("[ ] reduceII()");
     ArrayList<State<MessageType>> _all_states = automaton.getAllStates();
     HashSet<HashSet<State<MessageType>>> partitions = new HashSet<HashSet<State<MessageType>>>();
@@ -237,8 +257,17 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
       for (int j = i + 1; j < _all_states.size(); j++) {
         State<MessageType> s1 = _all_states.get(j);
 
+        /* Don't merge if there is a causal relation. */
+        // break if either 1) S0->S1 and no S1->S0
+        // 2) S1->S0 and no S0->S1
+        boolean s0_to_s1 = !s0.getAcceptedTransitions(s1).isEmpty();
+        boolean s1_to_s0 = !s0.getAcceptedTransitions(s1).isEmpty();
+        if (s0_to_s1 != s1_to_s0)
+          // the same as (s0_to_s1 && !s1_to_s0) || (s1_to_s0 && !s0_to_s1)
+          continue;
+
         /* If there are transitions in common, merge two partitions. */
-        if (_have_in_common(s0, s1) > 0) {
+        if (_msg_types_have_in_common(s0, s1) > 0) {
           // Get partition with s1 and merge it with partition with s0.
           HashSet<State<MessageType>> partition_with_s1 = getPartition(partitions, s1);
           if (partition_with_s1 != null && partition_with_s0 != partition_with_s1) {
@@ -297,7 +326,7 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
    * same symbol. In this resulting state machine each state represents the
    * state of the protocol that accepts a given message format.
    */
-  private static boolean reduceI(Automaton<MessageType> automaton) {
+  private static boolean generalizeI(Automaton<MessageType> automaton) {
     System.out.println("[ ] reduceI()");
     ArrayList<State<MessageType>> _all_states = automaton.getAllStates();
     HashMap<MessageType, HashSet<State<MessageType>>> to_merge = new HashMap<MessageType, HashSet<State<MessageType>>>();
@@ -326,6 +355,7 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
     List<MessageType> sequence = new ArrayList<MessageType>();
     for (Message m : session) {
       if (m.isInput()) { // Only process input messages.
+        STATS_MESSAGES++;
         Collection<Transition<RegEx>> path_in_language = language.accepts(m);
         if (path_in_language != null) {
           MessageType msg_type = new LanguageMessageType(path_in_language);
@@ -371,7 +401,7 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
     opt.setOption("--stateless=", "-s", "\tIf the server/protocol is stateless.");
     opt.setOption("--txt=", "-t", "FILE\tText file with a packet payload in each line");
     opt.setOption("--pcap=", "-p", "FILE\tPacket capture file in tcpdump format");
-    // opt.setOption("--sessions=", null, "FILE\tSessions object file");
+    opt.setOption("--sessions=", null, "FILE\tSessions object file");
     opt.setOption("--max=", "-m", "NUMBER\tMaximum number of messages to process");
     opt.setOption("--delim=", "-d", "Message delimiter (eg, \"\\r\\n\")");
 
@@ -394,9 +424,7 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
       String EXPRESSION = (opt.getTotalRemainingArgs() > 0) ? opt.getValueString() : null;
       Automaton.DEBUG = true;
 
-      int MAX = -1;
-      if (opt.getValueBoolean("-m"))
-        MAX = opt.getValueInteger("-m");
+      int MAX = opt.getValueBoolean("-m") ? opt.getValueInteger("-m") : -1;
 
       /* Load inferred input languages. */
       Automaton<RegEx> lang = Automaton.loadFromFile(LANGUAGE);
@@ -419,6 +447,9 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
       } else if (opt.getValueBoolean("--sessions=")) {
         sessions = (Collection<List<Message>>)utils.Utils.readFromFile(opt
             .getValueString("--sessions="));
+        if (opt.getValueBoolean("-m"))
+          sessions = Sessions.trim(sessions, MAX);
+
       } else {
         throw new OptionsException(OptionsException.Types.MISSING_PARAMETER, "Missing traces file.");
       }
@@ -430,25 +461,37 @@ public class StateMachineMoore extends Automaton<MessageType> implements java.io
       state_machine.drawAutomaton(OUTFILE, false);
       Utils.saveToFile(state_machine, OUTFILE);
 
-      /* Checking. */
+      /* STATISTICS */
+      // PcapFile.printStatistics(sessions);
+      System.out.print("[S]\t" + STATS_MESSAGES);
+      // times: PTA, GENERALIZE, MINIMIZATION
+      System.out.print("\t" + STATS_TIMER_PTA + "\t" + STATS_TIMER_GENERALIZE + "\t"
+          + STATS_TIMER_MINIMIZATION);
+      // states after PTA and after generalization
+      System.out.print("\t" + STATS_STATES0 + "\t" + STATS_STATES1);
+      // inferred msg types after PTA and after generalization
+      System.out.print("\t" + STATS_PATHS0 + "\t" + STATS_PATHS1);
+      System.out.println();
+
+      /* Checking (original). */
       for (List<Message> session : sessions) {
         try {
           List<MessageType> inferred = state_machine.convertSessionToSequenceOfMsgTypes(session);
           if (!state_machine.acceptsPrefix(inferred)) {
-            System.err.println("X " + inferred);
+            System.err.println("X message unrecognized: " + inferred);
             System.err.println("ERROR: !state_machine.accepts(inferred)");
             utils.Utils.sleep(10000);
             System.exit(1);
-          } else
-            System.out.print(".");
+          }// else System.out.print(".");
         } catch (UnknownMessageTypeException e1) {
-          System.err.println("X " + e1 + session.get(e1.nth_message));
+          System.err.println("X session not accepted: " + e1 + session.get(e1.nth_message));
           System.err.println("ERROR: UnknownMessageTypeException!");
           utils.Utils.sleep(10000);
           e1.printStackTrace();
           System.exit(1);
         }
       }
+      System.out.println("All ok!");
 
     } catch (OptionsException e_options) {
       /* print usage and quit */

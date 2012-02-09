@@ -31,8 +31,7 @@
 
 package automata;
 
-import java.util.Collection;
-import java.util.Iterator;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -139,5 +138,10 @@ public class LanguageMessageType implements MessageType, java.io.Serializable {
   // }
   // return (iter.hasNext() == false);
   // }
+
+  @Override
+  public Object clone() {
+    return new LanguageMessageType(new ArrayList<Transition<RegEx>>(_path_in_language));
+  }
 
 }

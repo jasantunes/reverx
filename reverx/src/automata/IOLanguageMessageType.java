@@ -31,8 +31,7 @@
 
 package automata;
 
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 public class IOLanguageMessageType implements MessageType, java.io.Serializable {
   private static final long serialVersionUID = LanguageMessageType.serialVersionUID;
@@ -90,6 +89,13 @@ public class IOLanguageMessageType implements MessageType, java.io.Serializable 
         sb.append(", ");
     }
     return sb.toString();
+  }
+
+  @Override
+  public Object clone() {
+    List<LanguageMessageType> input_clone = new ArrayList<LanguageMessageType>(_input);
+    List<LanguageMessageType> output_clone = new ArrayList<LanguageMessageType>(_output);
+    return new IOLanguageMessageType(input_clone, output_clone);
   }
 
 }

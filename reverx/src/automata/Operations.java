@@ -124,7 +124,8 @@ public class Operations {
         // Recursive call.
         determinization_rec(states_to_merge, new_states);
       }
-      Transition<T> new_t = new Transition<T>(key, new_state);
+      @SuppressWarnings("unchecked")
+      Transition<T> new_t = new Transition<T>((T)key.clone(), new_state);
       new_t._freq = states_to_merge.freq;
       this_state._transitions.add(new_t);
     }
@@ -134,36 +135,6 @@ public class Operations {
   // ////////////////////////////////////////////////////////////
   // MINIMIZATION
   // ////////////////////////////////////////////////////////////
-
-  // private static class MergedState<T extends Symbol> extends
-  // HashSet<State<T>> {
-  // State<T> s;
-  //
-  // public MergedState(State<T> s) {
-  // setMergedState(s);
-  // }
-  //
-  // public State<T> getMergedState() {
-  // return s;
-  // }
-  //
-  // public void setMergedState(State<T> s) {
-  // this.s = s;
-  // }
-  //
-  // @Override
-  // public int hashCode() {
-  // return 0; // use equals()
-  // }
-  //
-  // @Override
-  // public boolean equals(Object obj) {
-  // if (obj instanceof State) {
-  // return this.contains(obj);
-  // }
-  // return super.equals(obj);
-  // }
-  // }
 
   /**
    * Object for cell. By default a new object is a cell marked as false (not
@@ -450,6 +421,7 @@ public class Operations {
    * calls. <b>NOTE:</b> it also replaces old states of the _initial_state and
    * _all_states fields with the merged states, thus creating duplicates.
    */
+  @SuppressWarnings("unchecked")
   public static <T extends Symbol> void merge(Automaton<T> automaton,
       LinkedList<State<T>> pairs_to_merge, HashMap<State<T>, State<T>> merged_mapping) {
     // Workaround to void recurrence.
@@ -481,8 +453,9 @@ public class Operations {
             pairs_to_merge.add(t0._dest_state);
             pairs_to_merge.add(t1._dest_state);
           }
-        } else
-          state0._transitions.add(t1);
+        } else {
+          state0._transitions.add((Transition<T>)t1.clone());
+        }
       }
 
       /* Replace all instances. */

@@ -55,7 +55,9 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
     /* Process each message of a session. */
     boolean look_for_output = false;
     for (Message m : session) {
+      STATS_MESSAGES++;
 
+      /* Input message. */
       if (m.isInput()) {
         // System.out.println("> " + m.toString());
         if (look_for_output) {
@@ -74,7 +76,7 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
           throw new UnknownMessageTypeException(m.toString(), nth_message);
       }
 
-      // Output message.
+      /* Output message. */
       else {
         // System.out.println("< " + m.toString());
         look_for_output = true;
@@ -144,6 +146,8 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
 
       /* Parse command-line parameters. */
       boolean stateless = opt.getValueBoolean("-s");
+      int MAX = opt.getValueBoolean("-m") ? opt.getValueInteger("-m") : -1;
+
       // Check for message delimiter (for text-based protocols).
       String MSG_DELIMITER = opt.getValueString("--delim=");
       if (MSG_DELIMITER != null) {
@@ -160,10 +164,8 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
       Automaton.DEBUG = true;
 
       /* Load inferred input languages. */
-      Automaton<RegEx> automaton = Automaton.loadFromFile(LANG1);
-      Language input_language = (Language)automaton;
-      automaton = Automaton.loadFromFile(LANG2);
-      Language output_language = (Language)automaton;
+      Language input_language = (Language)Utils.readFromFile(LANG1);
+      Language output_language = (Language)Utils.readFromFile(LANG2);
 
       /* Load sessions (extracted previously from traces). */
       Collection<List<Message>> sessions = null;
@@ -173,7 +175,7 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
       if (opt.getValueBoolean("--pcap=")) {
         traces = new PcapFile(opt.getValueString("--pcap="), EXPRESSION, SERVER_ADDR, MSG_DELIMITER);
         traces.open();
-        sessions = traces.getSessions(!stateless);
+        sessions = traces.getSessions(!stateless, MAX);
         traces.close();
       }
 
@@ -181,13 +183,16 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
       else if (opt.getValueBoolean("--sessions=")) {
         sessions = (Collection<List<Message>>)utils.Utils.readFromFile(opt
             .getValueString("--sessions="));
+        if (opt.getValueBoolean("-m"))
+          sessions = Sessions.trim(sessions, MAX);
+
       }
 
       // Text files (DEBUG).
       else if (opt.getValueBoolean("--txt=")) {
         traces = new TextFile(opt.getValueString("--txt="));
         traces.open();
-        sessions = traces.getSessions(!stateless);
+        sessions = traces.getSessions(!stateless, MAX);
         traces.close();
       }
 
@@ -203,6 +208,18 @@ public class StateMachineMealy extends StateMachineMoore implements java.io.Seri
       System.out.println("[T] TOTAL TIME:\t" + TIMER.getElapsedTime());
       state_machine.drawAutomaton(OUTFILE, false);
       Utils.saveToFile(state_machine, OUTFILE);
+
+      /* STATISTICS */
+      // PcapFile.printStatistics(sessions);
+      System.out.print("[S]\t" + STATS_MESSAGES);
+      // times: PTA, GENERALIZE, MINIMIZATION
+      System.out.print("\t" + STATS_TIMER_PTA + "\t" + STATS_TIMER_GENERALIZE + "\t"
+          + STATS_TIMER_MINIMIZATION);
+      // states after PTA and after generalization
+      System.out.print("\t" + STATS_STATES0 + "\t" + STATS_STATES1);
+      // inferred msg types after PTA and after generalization
+      System.out.print("\t" + STATS_PATHS0 + "\t" + STATS_PATHS1);
+      System.out.println();
 
     } catch (OptionsException e_options) {
       /* print usage and quit */

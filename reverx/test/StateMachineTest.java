@@ -24,7 +24,7 @@ public class StateMachineTest {
       Operations.minimization(automaton);
       automaton.drawAutomaton("test/reduce0", true);
 
-      StateMachineMoore.reduce(automaton);
+      StateMachineMoore.generalize(automaton);
       automaton.drawAutomaton("test/reduce1", true);
 
     } catch (IOException e) {
@@ -71,7 +71,6 @@ public class StateMachineTest {
       state_machine.drawAutomaton(output_state_machine_filename, false);
 
     } catch (Exception e) {
-      // TODO Auto-generated catch block
       e.printStackTrace();
     }
     System.out.println("DONE!");

@@ -99,4 +99,11 @@ public class Transition<T extends Symbol> implements Symbol, java.io.Serializabl
     this._dest_state = dest_state;
   }
 
+  @Override
+  public Object clone() {
+    @SuppressWarnings("unchecked")
+    Transition<T> t = new Transition<T>((T)_symbol.clone(), _dest_state);
+    t._freq = _freq;
+    return t;
+  }
 }

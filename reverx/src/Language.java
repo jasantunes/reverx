@@ -33,68 +33,71 @@ import traces.*;
 import utils.*;
 import utils.Timer;
 import automata.*;
+import automata.RegExOperations.RegularExpressionInterface;
 
 public class Language extends Automaton<RegEx> implements java.io.Serializable {
   protected static final long serialVersionUID = 1L;
-  // protected Automaton<RegEx> automaton;
-
   public static Timer TIMER;
 
-  public Language() {
-    super();
-  }
-
-  // public Language(Automaton<RegEx> automaton) {
-  // this._initial_state = automaton.getInitialState();
-  // this._all_states = automaton.getAllStates();
-  // }
-
-  // public Automaton<RegEx> getAutomaton() {
-  // return automaton;
-  // }
-
-  // public static Automaton<RegEx> inferLanguage(boolean direction,
-  // Collection<List<Message>> messages, float t1, int t2) {
-  // Language l = new Language();
-  // l.inferFromTraces(direction, messages, t1, t2);
-  // return l.automaton;
-  // }
+  private static int STATS_TIMER_PTA;
+  private static int STATS_TIMER_GENERALIZE;
+  private static int STATS_TIMER_MINIMIZATION;
+  private static int STATS_STATES0;
+  private static int STATS_STATES1;
+  private static int STATS_PATHS0;
+  private static int STATS_PATHS1;
+  private static int STATS_MESSAGES = 0;
 
   public Language(boolean is_input, Collection<List<Message>> messages, float T1, int T2) {
-    TIMER.mark();
     System.out.println("[ ] building automaton");
     // State.NEXT_ID = 0;
 
+    TIMER.restart();
     /* Extract individual messages and add them to the automaton. */
     for (List<Message> session : messages) {
       // System.out.println("> _____");
-      for (Message message : session) {
-        if (message.isInput() == is_input) {
-          // System.out.println("> " + message);
-          this.addSequence(message);
+      for (Message m : session) {
+        if (m.isInput() == is_input) {
+          STATS_MESSAGES++;
+          // System.out.println("> " + m);
+          this.addSequence(m);
         }
       }
     }
 
     int n = 0;
-    // automaton.DRAW("lang" + (++n) + "-PTA", false);
 
-    System.out.println("[T] PTA:\t" + TIMER.getElapsedTimeFromMark());
-    TIMER.mark();
+    STATS_TIMER_PTA = TIMER.getElapsedTime();
+    // automaton.DRAW("lang" + (++n) + "-PTA", false);
+    System.out.println("[T] PTA:\t" + STATS_TIMER_PTA);
+
+    /* STATS */
+    TIMER.pause();
+    STATS_STATES0 = _all_states.size();
+    STATS_PATHS0 = this.getListofPaths().size();
+    TIMER.resume();
+    /* STATS */
 
     /* Generalize and merge similar transitions. */
     System.out.println("[ ] generalizing automaton");
+
+    TIMER.mark();
     Operations.minimization(this);
+    STATS_TIMER_MINIMIZATION = TIMER.getElapsedTimeFromMark();
     int old_total = _all_states.size();
-    if (generalize(this, T2)) {
+    if (generalizeI(T2)) {
+      TIMER.mark();
       Operations.determinization(this);
       Operations.minimization(this);
-      // automaton.DRAW("lang" + (++n) + "-generalized-T2", false);
+      STATS_TIMER_MINIMIZATION += TIMER.getElapsedTimeFromMark();
+      // this.DRAW("lang" + (++n) + "-generalized-T2", false);
     }
-    while (generalize(this, T1)) {
+    while (generalizeII(T1)) {
+      TIMER.mark();
       Operations.determinization(this);
       Operations.minimization(this);
-      // automaton.DRAW("lang" + (++n) + "-generalized-T1", false);
+      STATS_TIMER_MINIMIZATION += TIMER.getElapsedTimeFromMark();
+      // this.DRAW("lang" + (++n) + "-generalized-T1", false);
     }
 
     int new_total = _all_states.size();
@@ -103,10 +106,16 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
 
     /* Concatenate linear transitions and states. */
     if (RegEx.hasTextBasedSupport())
-      concatUniqueLinearStates(this);
+      concatUniqueLinearStates();
     this.resetAllStates();
-    // automaton.DRAW("lang" + (++n) + "-generalized", false);
-    System.out.println("[T] Generalization:\t" + TIMER.getElapsedTimeFromMark());
+
+    STATS_TIMER_GENERALIZE = TIMER.getElapsedTime() - STATS_TIMER_PTA - STATS_TIMER_MINIMIZATION;
+    System.out.println("[T] Generalization:\t" + STATS_TIMER_GENERALIZE);
+
+    /* STATS */
+    STATS_STATES1 = _all_states.size();
+    STATS_PATHS1 = this.getListofPaths().size();
+    /* STATS */
   }
 
   /**
@@ -120,10 +129,9 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
     super.addSequence(RegEx.tokenize(message, 0));
   }
 
-  private static int _get_paths_to_state(Collection<State<RegEx>> all_states,
-      State<RegEx> dest_state) {
+  private int transitions_to_state(State<RegEx> dest_state) {
     int total_transitions = 0;
-    for (State<RegEx> s : all_states)
+    for (State<RegEx> s : _all_states)
       for (Transition<RegEx> t : s)
         if (t.getState() == dest_state)
           total_transitions++;
@@ -139,8 +147,9 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
    * @return Returns the index of the state merged with s0, -1 if no merging was
    *         made.
    */
-  private static void concatUniqueLinearTransitions(State<RegEx> s0,
-      Collection<State<RegEx>> all_states, Set<State<RegEx>> visited) {
+  private void concatUniqueLinearTransitions(State<RegEx> s0, Set<State<RegEx>> visited) {
+    if (!visited.add(s0))
+      return;
 
     /*
      * We are going to get the linear transitions t0 and t1, such that t0 is a
@@ -148,39 +157,40 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
      * automaton going to s1. Additionally, t1 is the only transition in s1.
      */
 
-    // Get t0 and s1 (dest_state of t0).
     for (Transition<RegEx> t0 : s0) {
 
-      // Keep checking if there are no more transitions to s1, besides
-      // t0.
-      while (true) {
-        State<RegEx> s1 = t0.getState();
-        if (_get_paths_to_state(all_states, s1) == 1) {
+      // concatenating t0+t1 where:
+      // (s0) -t0-> (s1) -t1-> ...
 
-          // Get t1, and t0's and t1's symbols (to concatenate).
-          ArrayList<Transition<RegEx>> transitions_from_s1 = s1.getTransitions();
-          if (transitions_from_s1.size() == 1) {
-            Transition<RegEx> t1 = transitions_from_s1.get(0);
-            RegEx symb0 = (RegEx)t0.getSymbol();
-            RegEx symb1 = (RegEx)t1.getSymbol();
+      // Ignore immutable transitions.
+      if (isImmutable(t0))
+        continue;
 
-            // Update t0 with both symbols.
-            t0.setSymbol(RegEx.concat(symb0, symb1));
-            t0.setState(t1.getState());
+      // There must be only one transition to s1, and that is t0.
+      State<RegEx> s1 = t0.getState();
+      int transitions_to_s1 = transitions_to_state(s1);
+      if (transitions_to_s1 != 1)
+        continue;
 
-            // Delete s1 from all_states.
-            all_states.remove(s1);
-            continue;
-          }
-        }
+      // There must be only one transition leaving s1, and that is t1.
+      ArrayList<Transition<RegEx>> transitions_from_s1 = s1.getTransitions();
+      if (transitions_from_s1.size() != 1)
+        continue;
 
-        break;
-      }
+      // Concatenate t0 + t1.
+      Transition<RegEx> t1 = transitions_from_s1.get(0);
+      RegEx symb0 = (RegEx)t0.getSymbol();
+      RegEx symb1 = (RegEx)t1.getSymbol();
+
+      // Update t0 with a concatenated symbol.
+      t0.setSymbol(RegEx.concat(symb0, symb1));
+      t0.setState(t1.getState());
+
+      // Delete s1 from all_states.
+      _all_states.remove(s1);
 
       // Proceed through this path (depth-first).
-      State<RegEx> child = t0.getState();
-      if (visited.add(child))
-        concatUniqueLinearTransitions(child, all_states, visited);
+      concatUniqueLinearTransitions(t0.getState(), visited);
 
     }
 
@@ -191,75 +201,159 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
    * and no more transitions exist to S1 besides A and from S1 besides B, then
    * S0 -AB-> S2
    */
-  public static void concatUniqueLinearStates(Automaton<RegEx> automaton) {
-    State<RegEx> initial_state = automaton.getInitialState();
-    ArrayList<State<RegEx>> all_states = automaton.getAllStates();
-    int size = all_states.size();
-    concatUniqueLinearTransitions(initial_state, all_states, new HashSet<State<RegEx>>(size));
+  public void concatUniqueLinearStates() {
+    concatUniqueLinearTransitions(_initial_state, new HashSet<State<RegEx>>(_all_states.size()));
   }
 
-  private static boolean generalize(Automaton<RegEx> automaton, int MIN_TRANSITIONS) {
+  /**
+   * Splits the transition's symbol at the first regular expression token. This
+   * is required to merge transitions (by separating their first token and then
+   * merging it).
+   */
+  private RegularExpressionInterface prepareTransitionForMerge(Transition<RegEx> t,
+      Collection<State<RegEx>> new_states) {
+    RegEx re = (RegEx)t.getSymbol();
+
+    RegularExpressionInterface first_token = null;
+    List<RegularExpressionInterface> re_tokens = RegExOperations.process(re.getPattern());
+    if (re_tokens.size() > 1) {
+      // Replace current symbol with first token.
+      first_token = re_tokens.get(0);
+      re.setPattern(first_token.toString());
+
+      // Create a new transition for the remaining tokens.
+      RegEx remaining = new RegEx(RegExOperations.toPattern(re_tokens, 1));
+      Transition<RegEx> next = new Transition<RegEx>(remaining, t.getState());
+
+      // Replace t's next state to an intermediate one.
+      State<RegEx> intermediate_state = new State<RegEx>();
+      intermediate_state.getTransitions().add(next);
+      new_states.add(intermediate_state);
+      t.setState(intermediate_state);
+
+    } else {
+      // Only one token, so no need to create an intermediate state.
+      first_token = re_tokens.get(0);
+      re.setPattern(first_token.toString());
+    }
+
+    return first_token;
+  }
+
+  private boolean generalizeState(State<RegEx> s, Collection<State<RegEx>> new_states) {
+    System.out.print("\tGEN!");
+    boolean dirty = false;
+
+    // Get all symbols first, then generalize them all to the same unifying
+    // symbol.
+    List<RegularExpressionInterface> to_generalize = new ArrayList<RegularExpressionInterface>(s
+        .getTransitions().size());
+    for (Transition<RegEx> t : s) {
+      if (!isImmutable(t)) {
+        // if (RegEx.hasTextBasedSupport()) {
+        RegularExpressionInterface symbol = prepareTransitionForMerge(t, new_states);
+        to_generalize.add(symbol);
+        dirty = true;
+        // } else
+        // dirty |= ((RegEx)t.getSymbol()).generalize_BINARY();
+      }
+    }
+
+    // Get unifying symbol.
+    RegExOperations.BracketedExpression unifying_symbol = new RegExOperations.BracketedExpression();
+    for (RegularExpressionInterface re : to_generalize)
+      unifying_symbol = RegExOperations.merge(unifying_symbol, re);
+    String unifying_regular_expression = unifying_symbol.toString();
+
+    // Set all transitions to the new unifying symbol.
+    for (Transition<RegEx> t : s) {
+      if (!isImmutable(t))
+        ((RegEx)t.getSymbol()).setPattern(unifying_regular_expression);
+    }
+
+    return dirty;
+  }
+
+  private boolean generalizeI(int MIN_TRANSITIONS) {
     System.out.println("[ ] generalizing states with DIFFERENT_TRANSITIONS >= " + MIN_TRANSITIONS);
     ArrayList<State<RegEx>> new_states = new ArrayList<State<RegEx>>();
     boolean dirty = false;
 
-    for (State<RegEx> s : automaton.getAllStates()) {
+    for (State<RegEx> s : _all_states) {
       int total_transitions = s.getTransitions().size();
+
+      /* Check for eligible transitions */
+      for (Transition<RegEx> t : s) {
+        if (isImmutable(t))
+          total_transitions--;
+      }
       if (total_transitions <= 1)
         continue;
 
+      /* generalize */
       System.out.print("[ ] \t" + s + "\tDIFFERENT_TRANSITIONS = " + total_transitions);
-      // generalize
       if (total_transitions >= MIN_TRANSITIONS) {
-        System.out.println("\tGEN!");
-        for (Transition<RegEx> t : s) {
-
-          if (RegEx.hasTextBasedSupport())
-            dirty |= ((RegEx)t.getSymbol()).generalize(false);
-          else
-            dirty |= ((RegEx)t.getSymbol()).generalize_BINARY();
-        }
-      } else
-        System.out.println();
+        dirty |= generalizeState(s, new_states);
+      }
+      System.out.println();
 
     }// for ALL states
 
     if (dirty)
-      automaton.getAllStates().addAll(new_states);
+      _all_states.addAll(new_states);
     return dirty;
   }
 
-  private static boolean generalize(Automaton<RegEx> automaton,
-      float MIN_RATIO_TRANSITIONS_OVER_TOTAL_FREQ) {
+  /**
+   * Determines if a particular transition is immutable, i.e., if it cannot be
+   * concatenated nor generalized with other transitions. A transition is
+   * immutable if its symbol (RegEx) contains a delimiter or if it goes to a
+   * final state.
+   */
+  private static boolean isImmutable(Transition<RegEx> t) {
+    if (t.getState().isFinal())
+      return true;
+    RegEx re = (RegEx)t.getSymbol();
+    // TODO: this delimiters are hardcoded... for now.
+    if (re.accepts(" ") || re.accepts("\r\n"))
+      return true;
+    return false;
+  }
+
+  private boolean generalizeII(float MIN_RATIO_TRANSITIONS_OVER_TOTAL_FREQ) {
     System.out.println("[ ] generalizing states with RATIO_DIFFERENT_TRANSITIONS > "
         + Convert.toDecimalString(MIN_RATIO_TRANSITIONS_OVER_TOTAL_FREQ, 2) + "...");
+    ArrayList<State<RegEx>> new_states = new ArrayList<State<RegEx>>();
     boolean dirty = false;
 
-    for (State<RegEx> s : automaton.getAllStates()) {
+    for (State<RegEx> s : _all_states) {
       int total_transitions = s.getTransitions().size();
+      int sum_freq = 0;
+
+      // Check for eligible transitions.
+      for (Transition<RegEx> t : s) {
+        if (!isImmutable(t))
+          sum_freq += t.getFreq();
+        else
+          total_transitions--;
+      }
+
       if (total_transitions <= 1)
         continue;
-
-      int sum_freq = 0;
-      for (Transition<RegEx> t : s)
-        sum_freq += t.getFreq();
 
       float ratio_different_transitions = (float)total_transitions / (float)sum_freq;
       System.out.print("[ ] \t" + s + "\tRATIO : " + total_transitions + " / " + sum_freq + "\t= "
           + String.format("%.2f", ratio_different_transitions));
-      if (ratio_different_transitions >= MIN_RATIO_TRANSITIONS_OVER_TOTAL_FREQ) {
-        System.out.println("\tGEN!");
-        for (Transition<RegEx> t : s) {
-          if (RegEx.hasTextBasedSupport())
-            dirty |= ((RegEx)t.getSymbol()).generalize(false);
-          else
-            dirty |= ((RegEx)t.getSymbol()).generalize_BINARY();
-        }
+      if (ratio_different_transitions >= MIN_RATIO_TRANSITIONS_OVER_TOTAL_FREQ)
+        dirty |= generalizeState(s, new_states);
 
-      } else
-        System.out.println();
+      System.out.println();
 
     }
+
+    if (dirty)
+      _all_states.addAll(new_states);
+
     return dirty;
   }
 
@@ -317,9 +411,8 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
       if (opt.getValueBoolean("-b"))
         RegEx.setTextBasedSupport(false);
       boolean stateless = opt.getValueBoolean("-s");
-      int MAX = -1;
-      if (opt.getValueBoolean("-m"))
-        MAX = opt.getValueInteger("-m");
+
+      int MAX = opt.getValueBoolean("-m") ? opt.getValueInteger("-m") : -1;
 
       String MSG_DELIMITER = opt.getValueString("--delim=");
       // Check for message delimiter (for text-based protocols).
@@ -357,6 +450,8 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
       else if (opt.getValueBoolean("--sessions=")) {
         sessions = (Collection<List<Message>>)utils.Utils.readFromFile(opt
             .getValueString("--sessions="));
+        if (opt.getValueBoolean("-m"))
+          sessions = Sessions.trim(sessions, MAX);
       }
 
       else {
@@ -372,33 +467,33 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
       language.saveToFile(LANGUAGE);
       language.drawAutomaton(LANGUAGE, false);
 
-      /* Check */
-      boolean input = !opt.getValueBoolean("--output=");
-      for (List<Message> session : sessions) {
-        for (Message m : session) {
-          if (m.toString().startsWith("PORT"))
-            System.out.println("HERE!");
-          if (m.isInput() == input && language.accepts(m) == null) {
-            System.err.println("X " + m);
-            Utils.sleep(10000);
-            System.exit(0);
-          }
-        }
-      }
-
-      /* STATISTICS */
-      PcapFile.printStatistics(sessions);
+      /* DEBUG */
+      // __checkLanguage__(language, !opt.getValueBoolean("--output="),
+      // sessions,
+      // "331 Anonymous login ok");
 
       System.out.println("# Printing all paths");
-      ArrayList<ArrayList<RegEx>> all_paths = language.getListofPaths();
-      for (ArrayList<RegEx> path : all_paths) {
+      List<List<RegEx>> all_paths = language.getListofPaths();
+      for (List<RegEx> path : all_paths) {
         for (RegEx symbol : path)
           System.out.print(symbol);
         System.out.println();
       }
-      System.out.println("[S] inferred msgs formats:\t" + all_paths.size());
+      System.out.println("[ ] inferred msgs formats:\t" + all_paths.size());
 
       System.out.println("[ ] DONE!");
+
+      /* STATISTICS */
+      // PcapFile.printStatistics(sessions);
+      System.out.print("[S]\t" + STATS_MESSAGES);
+      // times: PTA, GENERALIZE, MINIMIZATION
+      System.out.print("\t" + STATS_TIMER_PTA + "\t" + STATS_TIMER_GENERALIZE + "\t"
+          + STATS_TIMER_MINIMIZATION);
+      // states after PTA and after generalization
+      System.out.print("\t" + STATS_STATES0 + "\t" + STATS_STATES1);
+      // inferred msg types after PTA and after generalization
+      System.out.print("\t" + STATS_PATHS0 + "\t" + STATS_PATHS1);
+      System.out.println();
 
     } catch (OptionsException e_options) {
       /* print usage and quit */
@@ -408,6 +503,24 @@ public class Language extends Automaton<RegEx> implements java.io.Serializable {
     } catch (Exception e) {
       e.printStackTrace();
     }
+  }
+
+  /**
+   * Check if all traces are accepted.
+   */
+  public static void __checkLanguage__(Language l, boolean test_input,
+      Collection<List<Message>> sessions, String begin_message_stop_at) throws Exception {
+    for (List<Message> session : sessions) {
+      for (Message m : session) {
+
+        if (begin_message_stop_at != null && m.toString().startsWith(begin_message_stop_at))
+          System.out.println("HERE");
+
+        if (m.isInput() == test_input && l.accepts(m) == null)
+          throw new Exception("X " + m);
+      }
+    }
+
   }
 
   /**

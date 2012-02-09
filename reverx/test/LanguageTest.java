@@ -1,5 +1,4 @@
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 import org.junit.Before;
 import org.junit.Test;
 import traces.*;
@@ -7,7 +6,13 @@ import automata.*;
 
 public class LanguageTest {
 
-  private Automaton<RegEx> automaton = null;
+  private Language automaton = null;
+
+  private static Language createEmptyLanguage() {
+    Collection<List<Message>> messages = new ArrayList<List<Message>>();
+    Language l = new Language(true, messages, 0, 0);
+    return l;
+  }
 
   private static Transition<RegEx> addTransition(State<RegEx> s, String text, State<RegEx> dest) {
     Transition<RegEx> t = new Transition<RegEx>(new RegEx(new ByteChars(text.getBytes())), dest);
@@ -29,7 +34,7 @@ public class LanguageTest {
 
   @Before
   public void setUp() throws Exception {
-    automaton = new Automaton<RegEx>();
+    automaton = createEmptyLanguage();
 
     State<RegEx> s0 = automaton.getInitialState();
 
@@ -82,7 +87,7 @@ public class LanguageTest {
 
   @Test
   public void concatUniqueLinearTransitionsTest() {
-    Language.concatUniqueLinearStates(automaton);
+    automaton.concatUniqueLinearStates();
     automaton.DRAW("test/LanguageTest1", false);
   }
 

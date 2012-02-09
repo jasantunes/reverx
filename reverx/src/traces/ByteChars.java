@@ -83,7 +83,7 @@ public class ByteChars implements CharSequence, java.io.Serializable {
   public String toString() {
     StringBuffer sb = new StringBuffer(buf.length * 3);
     for (int i = off; i < off + len; i++) {
-      if (RegEx.isASCIIPrintable(buf[i]))
+      if (isASCIIPrintable(buf[i]))
         sb.append((char)buf[i]);
       else
         sb.append(RegEx.escape(buf[i]));
@@ -91,12 +91,17 @@ public class ByteChars implements CharSequence, java.io.Serializable {
     return sb.toString();
   }
 
-  // public void append(ByteChars other) {
-  // ByteChars concatenated = ByteChars.concat(this, other);
-  // this.buf = concatenated.buf;
-  // this.len = concatenated.len;
-  // this.off = concatenated.off;
-  // }
+  public static boolean isASCIIPrintable(byte b) {
+    return (b >= 32 && b <= 126);
+  }
+
+  public static boolean isASCIIAlpha(byte b) {
+    return ((b >= 65 && b <= 90) || (b >= 97 && b <= 122));
+  }
+
+  public static boolean isASCIIDigit(byte b) {
+    return (b >= 48 && b <= 57);
+  }
 
   // /*
   // * We use ISO-8859-1 because it maps every byte in the range 0x00..0xFF to a
@@ -139,21 +144,5 @@ public class ByteChars implements CharSequence, java.io.Serializable {
     System.arraycopy(arg1.buf, arg1.off, data, arg0.len, arg1.len);
     return new ByteChars(data);
   }
-
-  // public static ByteChars concat(List<ByteChars> messages) {
-  // // get len
-  // int len = 0;
-  // for (ByteChars b : messages)
-  // len += b.len;
-  // byte[] data = new byte[len];
-  //
-  // // copy all elements to array
-  // int off = 0;
-  // for (ByteChars b : messages) {
-  // System.arraycopy(b.buf, b.off, data, off, b.len);
-  // off += b.len;
-  // }
-  // return new ByteChars(data);
-  // }
 
 }

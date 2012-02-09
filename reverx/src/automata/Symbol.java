@@ -53,4 +53,6 @@ public interface Symbol {
 
   // public float similarityScore(Symbol symbol);
 
+  public Object clone();
+
 }

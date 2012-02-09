@@ -35,10 +35,6 @@ import java.util.ArrayList;
 import automata.Symbol;
 
 public class GlobalSequenceAlignment {
-  // SIMILARITY_SCORE = node.similarityScore(new_sequence[i]);
-  // public static final int SIMILARITY_SCORE = 1;
-  // public static final int MISMATCH_PENALTY = 0; // TODO: experimentar score
-  // matrix (ASCII vs non-ASCII vs merged_nodes)
   public static final int INDEL_PENALTY = 0; // gap penalty (<=0)
 
   public static class Alignment {
@@ -84,6 +80,11 @@ public class GlobalSequenceAlignment {
 
     public String toDot() {
       return toString();
+    }
+
+    @Override
+    public Object clone() {
+      return new SymbolByte(this.symbol);
     }
 
   }
@@ -206,7 +207,6 @@ public class GlobalSequenceAlignment {
     } catch (Exception e) {
       e.printStackTrace();
     }
-
   }
 
 }

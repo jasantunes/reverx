@@ -352,10 +352,6 @@ public class PcapFile implements TracesInterface {
       LinkedHashMap<Connection, List<Message>> sessions = new LinkedHashMap<Connection, List<Message>>();
       Message m = null;
       while ((m = getNextPacket()) != null && sample_size != 0) {
-
-        // if (m.toString().startsWith("230-"))
-        // System.out.println("HERE");
-
         List<Message> session = sessions.get(last_connection);
         if (session == null) {
           session = new ArrayList<Message>();
