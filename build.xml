@@ -1,0 +1,28 @@
+<project name="reverx" default="dist" basedir=".">
+    <description>
+        simple example build file
+    </description>
+  <property name="src" location="src"/>
+  <property name="build" location="build"/>
+  <property name="dist"  location="dist"/>
+  <property name="classpath" location="lib/jnetpcap-1.3b1.jar:lib/utils.jar"/>
+
+  <target name="compile">
+    <mkdir dir="${build}"/>
+    <javac srcdir="${src}" includeantruntime="false" classpath="${classpath}" destdir="${build}"/>
+  </target>
+
+  <target name="dist" depends="compile" description="generate jar file" >
+    <mkdir dir="${dist}"/>
+    <jar jarfile="${dist}/${ant.project.name}.jar" basedir="${src}" excludes="*.sh"/>
+  </target>
+
+  <target name="clean" description="clean up" >
+    <!-- delete all .class files -->
+    <delete>
+        <fileset dir="." defaultexcludes="false" includes="**/*.class"/>
+    </delete>
+    <!-- delete ${dist} -->
+  	<delete dir="${dist}"/>
+  </target>
+</project>
