@@ -14,7 +14,7 @@
 
   <target name="dist" depends="compile" description="generate jar file" >
     <mkdir dir="${dist}"/>
-    <jar jarfile="${dist}/${ant.project.name}.jar" basedir="${src}" excludes="*.sh"/>
+    <jar jarfile="${dist}/${ant.project.name}.jar" basedir="${build}" excludes="*.sh"/>
   </target>
 
   <target name="clean" description="clean up" >
